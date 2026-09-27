@@ -8,6 +8,9 @@
 
 > **免费开源（MIT）**：服务器**无需任何 license key** 即可运行，**不含任何授权校验代码**。
 
+> 🖥️ **不想自己配 MCP 客户端？** 试试 **[TIA 助手](https://aeenhance.com/)** —— 基于本引擎的桌面版：解压即用，内置中文 AI 助手，每次写入工程都先弹窗等你批准。
+> 👉 [官网 aeenhance.com](https://aeenhance.com/) · [看 1 分钟实录](https://aeenhance.com/#demo) · 申请试用：**bulaofen0036@gmail.com** · [详细对比 ↓](#tia-助手本引擎的桌面版)
+
 ![架构图](docs/assets/architecture.svg)
 
 在 **Windows + TIA Portal V20 或 V21** 下，通过 **MCP（stdio 或 HTTP）** 驱动博途：建项目、加硬件、生成 PLC（Tag/UDT/DB/SCL/LAD）、生成 **WinCC Unified** 画面与事件、编译诊断、保存。  
@@ -52,6 +55,36 @@ GetVersionControlStatus(changedOnly=true)
 3. **生成工程**：把现成模板 `templates\project-blueprints\scaffold_spec_motor.json`（或 `scaffold_spec_start_stop.json`）**拖到 `scripts\生成工程.bat` 图标上**——一条龙建项目→加 PLC/HMI→写块→编译→存盘。退出码 `0` 即成功。
    - 想改成自己的需求：让任意 AI 照 [`docs/AI_spec_prompt.md`](docs/AI_spec_prompt.md) 产出一份 spec（YAML/JSON 都行），再拖给 `生成工程.bat`。
    - 命令行等价写法：把根目录加进 PATH 后，`tia gen <spec>`（先 `--dry-run` 离线校验更稳）。
+
+---
+
+## TIA 助手：本引擎的桌面版
+
+[![TIA 助手 —— 跟它说中文，它去操作博途](https://aeenhance.com/img/og-cover.jpg)](https://aeenhance.com/)
+
+本仓库是**引擎**：你需要自己准备 Cursor / Claude / VS Code 这类 AI 客户端，再把它挂上去。
+如果你只想**打开就用**，或者要给不熟悉 MCP 的同事、现场调试人员用，可以看看作者做的 **[TIA 助手](https://aeenhance.com/)** ——
+同一台引擎，外面套了一个 Windows 桌面程序，AI 助手、在线监控、曲线记录都做进了界面里。
+
+![TIA 助手实录：写 SCL 块时，删除类操作单独弹窗确认](https://aeenhance.com/video/demo-write.jpg)
+
+<sub>↑ 软件实录截图（演示工程）：让它给两台水泵写一用一备轮换 FB，第一次编译有 4 条警告，它自己改到 0 错误 0 警告；每一步写操作都停下来等人点「是」。[看完整录屏 →](https://aeenhance.com/#demo)</sub>
+
+| | 开源 MCP（本仓库） | TIA 助手（桌面版） |
+|---|---|---|
+| 形态 | MCP 服务 + `tia` 命令行，接你自己的 AI 客户端 | Windows 桌面软件，**免安装、解压即用**，V20 / V21 双引擎随包自动选 |
+| AI | 自备 Cursor / Claude Desktop / VS Code 等 | **内置中文 AI 助手**；DeepSeek、千问、Kimi、智谱、OpenAI 兼容接口任选，接本机 **Ollama 可全程离线**、工程数据不出厂 |
+| 写操作把关 | 取决于你用的客户端 | **每次写入都弹窗等你批准**，不可逆操作（删块等）单独确认，审计日志带哈希链 |
+| 在线变量 | 只读（S7 绝对地址 / OPC UA，见 [在线实时读值指南](docs/在线实时读值_使用指南.md)） | **不装博途**，S7CommPlus 直连 CPU 按符号读写；写入默认关，开启后强制回读 |
+| 曲线记录 | — | 录制、叠加/拆分、导出与回放 CSV |
+| 环境体检 | `tia.cmd doctor` 命令行 | 图形化逐项检查运行库 / Openness 白名单 / 用户组，缺什么直接给修法，一键导出诊断包 |
+| 许可 | MIT，免费 | 商业授权，**可申请免费试用** |
+
+**怎么试**：发邮件到 **bulaofen0036@gmail.com**，写上你的博途版本（V20 / V21）和想试的场景 → 拿试用包，解压运行，把机器码发回来换授权 Key。
+最稳的试法：先让它**只读**把你手头的工程讲一遍，看说得对不对，满意了再让它动手。
+更多：[AI 助手](https://aeenhance.com/assistant) · [在线调试](https://aeenhance.com/online) · [安全边界](https://aeenhance.com/security) · [使用手册](https://aeenhance.com/manual) · [开始使用](https://aeenhance.com/start)
+
+> 两边用的是同一台引擎：这里修掉的 bug，TIA 助手里也会修；在 Issues 里提的问题，对两边都有用。
 
 ---
 
@@ -270,3 +303,14 @@ Bootstrap → Connect → CreateProject → AddDeviceWithFallback → AddHardwar
 | `templates/plc/` | Tag、UDT、DB、FC、FB、LAD 配方、SCL 示例 |
 | `templates/hmi/` | Unified 多页 `designJson` |
 | `templates/mcp-full-e2e-verify/` | E2E 验证用导入素材 |
+
+---
+
+## 联系作者
+
+- **Bug / 功能建议**：优先提 [Issues](https://github.com/bulaofen0036-coder/TIA_Portal_Openness_MCP/issues)，别人撞到同样的问题也能搜到。
+- **试用 TIA 助手、定制开发、项目合作**：**bulaofen0036@gmail.com**
+- **内测微信群**：群码七天一换，发邮件索取最新的。
+- 桌面版官网：**[aeenhance.com](https://aeenhance.com/)**
+
+> 西门子、TIA Portal、SIMATIC、STEP 7、WinCC 为 Siemens AG 的商标。本项目与 TIA 助手均为独立开发的第三方工具，与 Siemens AG 无任何隶属、代理或授权关系。
