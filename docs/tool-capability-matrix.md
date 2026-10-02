@@ -31,6 +31,7 @@
 
 | Tool | Description |
 |---|---|
+| GetToolTimings | [L0][Meta] Per-tool call count, total/avg/max ms since start (or last reset), measured inside the server. Does not touch TIA. |
 | FindTools | [L0][Meta] Search the FULL tool roster (all ~200 tools), including ones not listed in this session. The server ships a ~48-tool 'lite' roster by default so the tool list stays small and every host can load it; everything else is reached through this tool plus CallTool. USE THIS whenever the visible tools do not cover what you need, before concluding the server cannot do something. Search by capability words, not exact names: 'watch table', 'HMI screen', 'download', 'cross reference', 'GSD'. Returns each match's exact name, parameter signature with defaults, and full description; then invoke it with CallTool. |
 | CallTool | [L0][Meta] Invoke ANY tool in the full roster by name, including ones not listed in this session. Use FindTools first to get the exact name and parameter signature. Behaves exactly like calling the tool directly: same work, same result, same safety checks. Example: name='ExportPlcWatchTable', argumentsJson='{\:\,\:\}'. |
 
@@ -179,6 +180,8 @@
 
 | Tool | Description |
 |---|---|
+| ApplyHmiOperations | [L2][HMI] Many HMI edits in one call (SetAttribute\|GetAttribute\|SetProperty\|GetProperty\|Bind\|SetScript\|Delete\|Invoke), screen/items resolved once, one ExclusiveAccess (optional Transaction), per-operation ok/error. runAsync=true returns a jobId. |
+| GetHmiOperationsJob | [L2][HMI] Progress and per-operation results of an async ApplyHmiOperations job. Does not touch TIA. |
 | GetHmiProgramInfo | [L2][HMI] Get HMI software type (Classic/Basic/Unified), version, and list of all screen names. Requires: Connect + OpenProject. softwarePath from GetProjectTree (e.g. 'HMI_RT_1'). Use to confirm HMI type before choosing Classic vs Unified tool variants. |
 | DescribeHmiSoftware | [L2][HMI]Describe the HMI software object (members/methods) via reflection. Useful to discover Export/Import/Create APIs. |
 | DescribeHmiScreen | [L2][HMI]Describe one HMI screen object (members/methods) by name under an HMI software. |

@@ -61,6 +61,8 @@ namespace TiaMcpServer.ModelContextProtocol
             // 挡掉这几个出口等于内容直接丢：真实工程上 GetBlocks 的首页只装得下十几个块，
             // 剩下的拿不回来。它们只碰引擎自己内存里的那份副本，一个都不动 TIA 工程。
             "GetExport", "ListExports", "SaveExport", "DeleteExport", "ClearExports",
+            // HMI 批量编辑与作业轮询：发布一块 400+ 项的画面要几千次单项调用，批量是唯一可用的路。
+            "ApplyHmiOperations", "GetHmiOperationsJob", "GetToolTimings",
         };
 
         public static IList<McpServerTool> GetLiteTools()

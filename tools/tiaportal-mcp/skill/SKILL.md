@@ -140,7 +140,7 @@ L1  Connect, Disconnect, AttachToOpenProject, OpenProject, CreateProject,
 ### HTTP (any client that speaks JSON-RPC)
 
 ```powershell
-TiaMcpServer.exe --transport http --http-prefix http://127.0.0.1:8765/ --http-api-key <secret>
+TiaMcpServer.exe --transport http --http-prefix http://127.0.0.1:8765/ --http-api-key <secret> [--http-timeout 300]
 ```
 
 Endpoints:
@@ -986,6 +986,39 @@ matches **§12** in this file; exercise it on your own Unified RT project.
 - `SetObjectProperty` writes a plain CLR property (dotted path, e.g. `ScriptCode`,
   `Trigger.Type`, `Font.Size`); values are converted to the property type (enum by name,
   Color as `#RRGGBB` / `0xAARRGGBB`). Use `InvokeObject SetAttribute` for attributes.
+
+### Many HMI edits: `ApplyHmiOperations` (v2.8.0)
+
+One call per SetAttribute / Bind / script / colour check costs a round trip plus a fresh
+screen + item resolve each time. Batch them instead:
+
+```json
+[
+  {"op":"SetAttribute","screen":"Heaters","item":"Lbl_T1","name":"ForeColor","value":"0xFF1E293B"},
+  {"op":"SetProperty","screen":"Heaters","item":"Lbl_T1","sub":"Font","name":"Size","value":14},
+  {"op":"Bind","screen":"Heaters","item":"IO_T1","property":"ProcessValue","tag":"T1_Act","dataType":"Real"},
+  {"op":"SetScript","screen":"Heaters","item":"Btn_On","event":"Tapped","code":"HMIRuntime.Tags.SysFct.SetBitInTag(\"H_On\",0);"},
+  {"op":"GetAttribute","screen":"Heaters","item":"Lbl_T1","name":"ForeColor"},
+  {"op":"GetProperty","path":"TextLists/TL_RamState","name":"Name"},
+  {"op":"Delete","screen":"testing","item":"Old"},
+  {"op":"Invoke","screen":"testing","item":"Btn1","sub":"Dynamizations","method":"Create<ScriptDynamization>","args":["BackColor"],"allowWrite":true}
+]
+```
+
+- Every operation returns `{i, op, ok, error?, value?, ms}`; one failure does not stop the batch.
+- `useExclusiveAccess=true` (default) holds `TiaPortal.ExclusiveAccess` for the batch (the TIA
+  UI shows a busy dialog meanwhile). `useTransaction=true` also wraps it in one Transaction.
+- **Anything that may run longer than ~30 s: `runAsync=true`.** You get a `jobId` at once; poll
+  `GetHmiOperationsJob(jobId)` until `state=done`, paging results with `offset`/`limit`.
+  While a job runs, other TIA tools answer "busy" after 2 s instead of queueing behind it;
+  `GetHmiOperationsJob` / `GetToolTimings` always answer.
+- Item lookups use the composition's `Find(name)` (one call) instead of walking the whole
+  screen. `ApplyUnifiedHmiScreenDesignJson` benefits too, so bigger design chunks are fine.
+- `GetToolTimings` reports per-tool count / total / avg / max ms inside the server (with
+  `reset=true` to start a fresh measurement). HMI step tools also report `meta.elapsedMs`;
+  `InvokeObject` reports `meta.resolveMs` / `meta.invokeMs`.
+- No z-order control: V21 Openness has no Move/Insert on `ScreenItems` and no z-index/layer
+  property, so stacking order is creation order.
 
 ## 13. Real download — V21 cast bug (FIXED 2026-06-17, verified on a real CPU)
 

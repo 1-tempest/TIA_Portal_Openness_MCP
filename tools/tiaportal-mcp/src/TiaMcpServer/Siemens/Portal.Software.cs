@@ -3133,6 +3133,14 @@ namespace TiaMcpServer.Siemens
             return RunHmiStepTool("SetUnifiedHmiButtonEventScriptCode", meta =>
             {
                 var handler = ResolveHmiButtonEventHandlerOrThrow(hmiSoftwarePath, screenName, buttonName, eventType);
+                return WriteEventScript(handler, buttonName, eventType, scriptCode, globalDefinitionAreaScriptCode, async, syntaxCheck, meta);
+            });
+        }
+
+        // 从 SetUnifiedHmiButtonEventScriptCode 拆出来，ApplyHmiOperations 的 SetScript 复用同一套写法与判据。
+        private static string WriteEventScript(object handler, string buttonName, string eventType, string scriptCode, string globalDefinitionAreaScriptCode, bool async, bool syntaxCheck, JsonObject meta)
+        {
+            {
                 var script = TryGetPropertyValue(handler, "Script");
                 if (script == null)
                 {
@@ -3218,7 +3226,7 @@ namespace TiaMcpServer.Siemens
                 return syntaxCheck
                     ? $"ScriptCode set for '{buttonName}.{eventType}'."
                     : $"ScriptCode set for '{buttonName}.{eventType}' (SyntaxCheck skipped by default; see syntaxCheckSkippedReason).";
-            });
+            }
         }
 
         public ResponseMessage EnsureUnifiedHmiDynamization(string hmiSoftwarePath, string screenName, string itemName, string propertyName, string dynamizationType = "")
@@ -3298,7 +3306,20 @@ namespace TiaMcpServer.Siemens
         {
             return RunHmiStepTool("BindUnifiedHmiTagDynamization", meta =>
             {
+                var sw = System.Diagnostics.Stopwatch.StartNew();
                 var item = ResolveHmiScreenItemOrThrow(hmiSoftwarePath, screenName, itemName);
+                meta["resolveMs"] = sw.ElapsedMilliseconds;
+                sw.Restart();
+                var message = BindTagDynamizationOnItem(item, itemName, propertyName, tagName, dataType, plcTag, address, meta);
+                meta["bindMs"] = sw.ElapsedMilliseconds;
+                return message;
+            });
+        }
+
+        // 从 BindUnifiedHmiTagDynamization 拆出来，ApplyHmiOperations 的 Bind 复用。
+        private static string BindTagDynamizationOnItem(object item, string itemName, string propertyName, string tagName, string dataType, string plcTag, string address, JsonObject meta)
+        {
+            {
                 var dynamizations = TryGetPropertyValue(item, "Dynamizations");
                 if (dynamizations == null) throw new InvalidOperationException($"Dynamizations not found on '{itemName}'.");
 
@@ -3342,7 +3363,7 @@ namespace TiaMcpServer.Siemens
                 }
 
                 return $"Tag dynamization for '{itemName}.{propertyName}' bound to '{tagName}'.";
-            });
+            }
         }
 
         private static bool TrySetProperty(object target, string propName, object? value)
@@ -3372,6 +3393,7 @@ namespace TiaMcpServer.Siemens
                 ["success"] = false
             };
 
+            var stepWatch = System.Diagnostics.Stopwatch.StartNew();
             try
             {
                 if (IsProjectNull())
@@ -3382,6 +3404,7 @@ namespace TiaMcpServer.Siemens
 
                 var message = action(meta);
                 meta["success"] = true;
+                meta["elapsedMs"] = stepWatch.ElapsedMilliseconds;
                 return new ResponseMessage { Message = message, Meta = meta };
             }
             catch (TargetInvocationException tie) when (tie.InnerException != null)
@@ -3440,6 +3463,11 @@ namespace TiaMcpServer.Siemens
         private object ResolveHmiButtonEventHandlerOrThrow(string hmiSoftwarePath, string screenName, string buttonName, string eventType)
         {
             var button = ResolveHmiScreenItemOrThrow(hmiSoftwarePath, screenName, buttonName);
+            return GetOrCreateEventHandlerOrThrow(button, buttonName, eventType);
+        }
+
+        private static object GetOrCreateEventHandlerOrThrow(object button, string buttonName, string eventType)
+        {
             var eventHandlers = TryGetPropertyValue(button, "EventHandlers");
             if (eventHandlers == null)
             {
@@ -3586,26 +3614,7 @@ namespace TiaMcpServer.Siemens
         }
 
         private static object? FindExistingByName(object compositionOrEnumerable, string name)
-        {
-            try
-            {
-                if (compositionOrEnumerable is IEnumerable en)
-                {
-                    foreach (var it in en)
-                    {
-                        var n = TryGetName(it);
-                        if (!string.IsNullOrWhiteSpace(n) &&
-                            string.Equals(n!.Trim(), name, StringComparison.OrdinalIgnoreCase))
-                        {
-                            return it;
-                        }
-                    }
-                }
-            }
-            catch { }
-
-            return null;
-        }
+            => HmiNameLookup.Find(compositionOrEnumerable, name);
 
         private static object? InvokeCreate(MethodInfo method, object target, object[] args)
         {
@@ -5915,7 +5924,7 @@ namespace TiaMcpServer.Siemens
         // Both walk nested screen groups / folders; see ModelContextProtocol/HmiScreenWalk.cs.
         private static List<string> TryListScreens(object hmiRoot) => ModelContextProtocol.HmiScreenWalk.ListNames(hmiRoot);
 
-        private static object? TryFindScreenByName(object hmiRoot, string wantedName) => ModelContextProtocol.HmiScreenWalk.FindByName(hmiRoot, wantedName);
+        private static object? TryFindScreenByName(object hmiRoot, string wantedName) => ModelContextProtocol.HmiNameLookup.FindScreen(hmiRoot, wantedName);
 
         private static List<string> TryListNamesFromCollection(object root, string[] propertyHints, string finalCollectionNameHint)
         {

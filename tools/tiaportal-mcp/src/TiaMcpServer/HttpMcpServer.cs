@@ -32,7 +32,10 @@ namespace TiaMcpServer
 
         // Upper bound on how long a POST waits for the MCP host to produce a matching
         // response before returning 504, so a stalled pipe can't hang the request forever.
-        private static readonly TimeSpan ResponseTimeout = TimeSpan.FromSeconds(30);
+        // Was a fixed 30 s, shorter than many legitimate Openness calls (HMI design apply, compile).
+        // Default 300 s; --http-timeout <seconds> overrides. Long batches belong in
+        // ApplyHmiOperations(runAsync=true) anyway.
+        private static TimeSpan ResponseTimeout = TimeSpan.FromSeconds(300);
 
         private sealed class Session
         {
@@ -53,12 +56,14 @@ namespace TiaMcpServer
             string prefix = options?.HttpPrefix ?? "http://127.0.0.1:8765/";
             if (!prefix.EndsWith("/")) prefix += "/";
             string? secret = options?.HttpApiKey;
+            if (options?.HttpTimeoutSeconds is int timeoutSeconds) ResponseTimeout = TimeSpan.FromSeconds(timeoutSeconds);
 
             var listener = new HttpListener();
             listener.Prefixes.Add(prefix);
             listener.Start();
 
             Console.Error.WriteLine($"TIA Portal MCP Server (HTTP) listening at {prefix}");
+            Console.Error.WriteLine($"HTTP response timeout: {ResponseTimeout.TotalSeconds:0} s");
             log($"HTTP transport started at {prefix}");
             if (secret == null)
                 Console.Error.WriteLine("WARNING: --http-api-key not set; endpoint is unauthenticated.");
@@ -221,6 +226,7 @@ namespace TiaMcpServer
             await requestLock.WaitAsync().ConfigureAwait(false);
             string? responseLine = null;
             bool timedOut = false;
+            Task<string?>? orphanRead = null;
             try
             {
                 mcpWriter.WriteLine(body);
@@ -252,9 +258,21 @@ namespace TiaMcpServer
 
                 var done = await Task.WhenAny(readWork, Task.Delay(ResponseTimeout)).ConfigureAwait(false);
                 if (done == readWork) responseLine = await readWork.ConfigureAwait(false);
-                else timedOut = true;
+                else { timedOut = true; orphanRead = readWork; }
             }
-            finally { requestLock.Release(); }
+            finally
+            {
+                // After a timeout the read worker is still blocked on the shared reader and will
+                // consume this request's late response. Releasing the lock now let the next request
+                // start a second reader on the same StreamReader; they raced, and the next caller
+                // could lose its own response. Hold the lock until the orphan has finished.
+                if (orphanRead == null) requestLock.Release();
+                else
+                {
+                    log($"HTTP request {requestId} timed out after {ResponseTimeout.TotalSeconds:0} s; next request waits for its late response.");
+                    _ = orphanRead.ContinueWith(_ => requestLock.Release(), TaskScheduler.Default);
+                }
+            }
 
             if (timedOut) { res.StatusCode = 504; res.Close(); return; }
             if (responseLine == null) { res.StatusCode = 500; res.Close(); return; }

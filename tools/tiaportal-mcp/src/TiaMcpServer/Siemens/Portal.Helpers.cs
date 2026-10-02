@@ -1650,25 +1650,7 @@ namespace TiaMcpServer.Siemens
                     if (table == null) return null;
                     var tagsComp = table.GetType().GetProperty("Tags")?.GetValue(table);
                     if (tagsComp == null) return null;
-                    try
-                    {
-                        if (tagsComp is System.Collections.IEnumerable en)
-                        {
-                            foreach (var it in en)
-                            {
-                                var n = TryGetName(it);
-                                if (!string.IsNullOrWhiteSpace(n) &&
-                                    string.Equals(n!.Trim(), tagName, StringComparison.OrdinalIgnoreCase))
-                                {
-                                    return it;
-                                }
-                            }
-                        }
-                    }
-                    catch { }
-                    // 原来这里还有一层 TryFindByNameInCollection(tagsComp, Array.Empty<string>(), ...) 的"兜底"，
-                    // 但该方法只遍历 propertyHints，空数组＝循环体一次不进＝恒返回 null，是死代码。
-                    return null;
+                    return FindExistingByName(tagsComp, tagName);
                 }
 
                 case "hmiconnection":
@@ -1707,23 +1689,7 @@ namespace TiaMcpServer.Siemens
                     if (screen == null) return null;
                     var itemsComp = screen.GetType().GetProperty("ScreenItems")?.GetValue(screen);
                     if (itemsComp == null) return null;
-                    try
-                    {
-                        if (itemsComp is System.Collections.IEnumerable en)
-                        {
-                            foreach (var it in en)
-                            {
-                                var n = TryGetName(it);
-                                if (!string.IsNullOrWhiteSpace(n) &&
-                                    string.Equals(n!.Trim(), itemName, StringComparison.OrdinalIgnoreCase))
-                                {
-                                    return it;
-                                }
-                            }
-                        }
-                    }
-                    catch { }
-                    return null;
+                    return FindExistingByName(itemsComp, itemName);
                 }
 
                 case "hmipath":
@@ -2237,7 +2203,9 @@ namespace TiaMcpServer.Siemens
 
         public ModelContextProtocol.ResponseObjectValue InvokeObject(string objectKind, string objectPath, string methodName, JsonArray? args = null, string softwarePath = "", bool allowWrite = false)
         {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
             var o = ResolveObject(objectKind, objectPath, softwarePath);
+            var resolveMs = sw.ElapsedMilliseconds;
             if (o == null)
             {
                 // 「找不到」必须是失败。原来这里返回一条 Message="Object not found" 的**正常**响应：
@@ -2249,7 +2217,13 @@ namespace TiaMcpServer.Siemens
                     + "(GetProjectTree / GetDeviceItemTree / GetSoftwareTree / GetBlocksWithHierarchy); "
                     + "for objectKind=Block/Type also pass softwarePath.");
             }
-            return InvokeOnInstance(o, objectKind, objectPath, methodName, args, allowWrite);
+            sw.Restart();
+            var result = InvokeOnInstance(o, objectKind, objectPath, methodName, args, allowWrite);
+            result.Meta ??= new JsonObject();
+            result.Meta["resolveMs"] = resolveMs;
+            result.Meta["invokeMs"] = sw.ElapsedMilliseconds;
+            _logger?.LogInformation($"InvokeObject {objectKind} '{objectPath}' {methodName}: resolve {resolveMs} ms, invoke {sw.ElapsedMilliseconds} ms");
+            return result;
         }
 
         /// <summary>
@@ -2267,6 +2241,11 @@ namespace TiaMcpServer.Siemens
                     + "for objectKind=Block/Type also pass softwarePath.");
             }
 
+            return SetPropertyOnInstance(o, objectKind, objectPath, propertyPath, value);
+        }
+
+        private static ModelContextProtocol.ResponseObjectValue SetPropertyOnInstance(object o, string objectKind, string objectPath, string propertyPath, object? value)
+        {
             var parts = (propertyPath ?? string.Empty).Split(new[] { '.' }, StringSplitOptions.RemoveEmptyEntries);
             if (parts.Length == 0)
             {

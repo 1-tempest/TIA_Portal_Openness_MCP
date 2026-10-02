@@ -40,6 +40,9 @@
     <Compile Include="..\..\src\TiaMcpServer\ModelContextProtocol\PortalFailureClassifier.cs" Link="PortalFailureClassifier.cs" />
     <!-- 画面分组递归（PR #41）：分组里的画面曾对所有画面工具隐形，只报一句「找不到」。 -->
     <Compile Include="..\..\src\TiaMcpServer\ModelContextProtocol\HmiScreenWalk.cs" Link="HmiScreenWalk.cs" />
+    <!-- 名字查找（Find 优先 + 缓存索引）：退回逐项遍历不会报错，只会让一次发布慢几十分钟。 -->
+    <Compile Include="..\..\src\TiaMcpServer\ModelContextProtocol\HmiNameLookup.cs" Link="HmiNameLookup.cs" />
+    <Compile Include="..\..\src\TiaMcpServer\ModelContextProtocol\ToolTimings.cs" Link="ToolTimings.cs" />
     <!-- DescribeBlockLogic 的回读（issue #42）：错了不报错、不崩，只会让人看到不存在的逻辑。 -->
     <Compile Include="..\..\src\TiaMcpServer\ModelContextProtocol\SimaticMlText.cs" Link="SimaticMlText.cs" />
     <Compile Include="..\..\src\TiaMcpServer\ModelContextProtocol\LadTextRenderer.cs" Link="LadTextRenderer.cs" />

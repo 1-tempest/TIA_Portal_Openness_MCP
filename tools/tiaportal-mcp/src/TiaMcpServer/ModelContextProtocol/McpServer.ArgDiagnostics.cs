@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
 
@@ -102,7 +103,57 @@ namespace TiaMcpServer.ModelContextProtocol
             }
 
             // 参数没问题 → 原样转交，返回内部工具的结果本身（不改写、不重新包装）。
-            return await _inner.InvokeAsync(request, cancellationToken).ConfigureAwait(false);
+            // 外面包一层：Openness 闸门（后台 HMI 作业运行时别并发碰 TIA）+ 每个工具的耗时统计。
+            var name = tool?.Name ?? "(tool)";
+            var gated = !IsGateExempt(name, request.Params?.Arguments);
+            if (gated)
+            {
+                // 没有后台作业时，闸门只是把调用排成串行（HTTP 本来就是串行的）。
+                // 有后台作业时不能干等：HTTP 那边持着请求锁，等下去连轮询作业进度的请求都进不来。
+                var jobId = TiaMcpServer.Siemens.Portal.RunningHmiJobId;
+                var wait = jobId == null ? Timeout.InfiniteTimeSpan : TimeSpan.FromSeconds(2);
+                if (!await TiaMcpServer.Siemens.Portal.OpennessGate.WaitAsync(wait, cancellationToken).ConfigureAwait(false))
+                {
+                    return TextError($"TIA is busy with HMI operations job '{jobId}'. Poll GetHmiOperationsJob until state=done, then retry {name}.");
+                }
+            }
+
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            var isError = true;
+            try
+            {
+                var result = await _inner.InvokeAsync(request, cancellationToken).ConfigureAwait(false);
+                isError = result?.IsError == true;
+                return result!;
+            }
+            finally
+            {
+                if (gated) TiaMcpServer.Siemens.Portal.OpennessGate.Release();
+                ToolTimings.Record(name, sw.ElapsedMilliseconds, isError);
+                McpServer.Logger?.LogInformation($"tool {name}: {sw.ElapsedMilliseconds} ms{(isError ? " (error)" : "")}");
+            }
+        }
+
+        /// <summary>不碰 TIA 的工具，作业运行期间也必须答得上来。</summary>
+        private static readonly HashSet<string> GateExempt = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "GetHmiOperationsJob", "GetToolTimings", "FindTools",
+            "GetExport", "ListExports", "DeleteExport", "ClearExports",
+        };
+
+        private static bool IsGateExempt(string toolName, IReadOnlyDictionary<string, System.Text.Json.JsonElement>? args)
+        {
+            if (GateExempt.Contains(toolName)) return true;
+            if (!string.Equals(toolName, "CallTool", StringComparison.OrdinalIgnoreCase) || args == null) return false;
+            foreach (var kv in args)
+            {
+                if (string.Equals(kv.Key, "name", StringComparison.OrdinalIgnoreCase)
+                    && kv.Value.ValueKind == System.Text.Json.JsonValueKind.String)
+                {
+                    return GateExempt.Contains(kv.Value.GetString() ?? "");
+                }
+            }
+            return false;
         }
 
         /// <summary>协议自己可能塞进来的字段，不算工具参数。</summary>

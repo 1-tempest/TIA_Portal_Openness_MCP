@@ -60,6 +60,9 @@ namespace TiaMcpServer.Tests
             Console.WriteLine("== 画面分组里的画面不许隐形（PR #41）==");
             HmiScreenWalkTests.Run(Check);
 
+            Console.WriteLine("== 名字查找不许退回逐项遍历（Find 优先 + 缓存索引）==");
+            HmiNameLookupTests.Run(Check);
+
             Console.WriteLine("== DescribeBlockLogic 的 SCL 回读逐行还原：下标 / 调用 / 常量 / 引号（issue #42）==");
             SymbolQuotingReadbackTests.Run(Check);
 

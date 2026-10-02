@@ -40,6 +40,21 @@ namespace TiaMcpServer.ModelContextProtocol
             return result;
         }
 
+        /// <summary>All screen objects, depth-first. Best-effort: a failing walk returns what it got so far.</summary>
+        public static List<object> EnumerateAll(object? hmiRoot)
+        {
+            var result = new List<object>();
+            try
+            {
+                foreach (var screen in EnumerateScreens(hmiRoot)) result.Add(screen);
+            }
+            catch
+            {
+                // best-effort only
+            }
+            return result;
+        }
+
         /// <summary>First screen whose name matches (case-insensitive), or null. Never throws.</summary>
         public static object? FindByName(object? hmiRoot, string wantedName)
         {

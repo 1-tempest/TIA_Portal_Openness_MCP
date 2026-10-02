@@ -11,6 +11,7 @@
         public string? Transport { get; set; } // "stdio" (default) or "http"
         public string? HttpPrefix { get; set; } // e.g. "http://127.0.0.1:8765/"
         public string? HttpApiKey { get; set; } // optional X-API-Key header value
+        public int? HttpTimeoutSeconds { get; set; } // --http-timeout: max seconds a POST waits for its response (default 300)
         public bool RunFlowLightTest { get; set; }
         public bool FixCurrentFlowBinding { get; set; }
         public bool ProbeS71200Device { get; set; }
@@ -755,6 +756,14 @@
                         if (i + 1 < args.Length)
                         {
                             options.HttpApiKey = args[i + 1];
+                            i++;
+                        }
+                        break;
+
+                    case "--http-timeout":
+                        if (i + 1 < args.Length && int.TryParse(args[i + 1], out var httpTimeout) && httpTimeout > 0)
+                        {
+                            options.HttpTimeoutSeconds = httpTimeout;
                             i++;
                         }
                         break;

@@ -2,7 +2,7 @@
   "package": "TIA_MCP_Delivery_v2.4.0",
   "generatedAt": "2026-09-16T17:25:02.533852+08:00",
   "source": "live MCP tools/list of TiaMcpServer.exe",
-  "toolCount": 223,
+  "toolCount": 226,
   "note": "Full roster (--profile full). The default lite profile lists ~49 of these; the rest stay reachable via FindTools + CallTool. Runtime tools/list remains authoritative.",
   "tools": [
     {
@@ -92,6 +92,21 @@
         "templateDirectory"
       ],
       "description": "[L2][HMI-Library]Offline-only QA for Unified HMI JSON templates. Checks theme metadata, screen bounds, duplicate item names, size issues, layout overlap warnings, density, and execution JSON shape. It does not connect to TIA Portal or modify projects."
+    },
+    {
+      "name": "ApplyHmiOperations",
+      "layer": "L2",
+      "domain": "HMI",
+      "method": "ApplyHmiOperations",
+      "returnType": "",
+      "parameters": [
+        "hmiSoftwarePath",
+        "operationsJson",
+        "runAsync",
+        "useExclusiveAccess",
+        "useTransaction"
+      ],
+      "description": "[L2][HMI] Run many HMI edits in ONE call: the screen and items are resolved once, the batch runs under one TiaPortal.ExclusiveAccess (optionally one Transaction), and every operation returns its own ok/error without stopping the batch. operationsJson = JSON array of {op, screen, item | path, sub?, ...}: SetAttribute{name,value} | GetAttribute{name} | SetProperty{name (dotted),value} | GetProperty{name (dotted)} | Bind{property,tag,dataType?,plcTag?,address?} | SetScript{event,code,globalCode?,async?} | Delete | Invoke{method,args?,allowWrite?}. 'path' is an HmiPath below the HMI software (e.g. TextLists/TL_X); 'sub' walks further from the target (e.g. Font). runAsync=true returns a jobId at once; poll GetHmiOperationsJob. Use runAsync for anything that may take over ~30 s (HTTP gateway timeout)."
     },
     {
       "name": "ApplyUnifiedHmiLayout",
@@ -1505,6 +1520,20 @@
       "description": "[L2][HMI]List HMI connection names (Classic/Unified, best-effort)"
     },
     {
+      "name": "GetHmiOperationsJob",
+      "layer": "L2",
+      "domain": "HMI",
+      "method": "GetHmiOperationsJob",
+      "returnType": "",
+      "parameters": [
+        "jobId",
+        "includeResults",
+        "offset",
+        "limit"
+      ],
+      "description": "[L2][HMI] Progress and per-operation results of an ApplyHmiOperations job started with runAsync=true. state: queued|running|done|failed. Does not touch TIA, so it answers while the job runs. Page results with offset/limit."
+    },
+    {
       "name": "GetHmiProgramInfo",
       "layer": "L2",
       "domain": "HMI",
@@ -1723,6 +1752,17 @@
         "softwarePath"
       ],
       "description": "[L2][Category:PLC-TechnologyObjects][PreCondition:Connect+OpenProject] List all Technology Objects (TOs) in the PLC software: axes, cams, measuring inputs, etc. Returns each TO's Name, type (OfSystemLibElement), and firmware version (OfSystemLibVersion). Use this to discover TO names before ExportTechnologyObject. No tool returns axis/TO parameter values directly — export the TO with ExportTechnologyObject and read the XML file. TOs are stored as TechnologicalInstanceDB instances in the TechnologicalObjectGroup."
+    },
+    {
+      "name": "GetToolTimings",
+      "layer": "L0",
+      "domain": "Meta",
+      "method": "GetToolTimings",
+      "returnType": "",
+      "parameters": [
+        "reset"
+      ],
+      "description": "[L0][Meta] Per-tool call count, total/avg/max milliseconds since start (or last reset), measured around each tool call inside the server. Use to compare publish timings before/after a change. Does not touch TIA."
     },
     {
       "name": "GetTypeInfo",

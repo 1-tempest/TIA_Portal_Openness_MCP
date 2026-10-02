@@ -1,6 +1,6 @@
 ﻿# Change Log
 
-## [2.8.0] - 2026-10-02 - 反射桥能走到任意 Openness 子对象；泛型方法；写普通属性
+## [2.8.0] - 2026-10-02 - 反射桥走到任意子对象；HMI 批量编辑与异步作业；按名查找不再逐项遍历
 
 ### 新增
 
@@ -18,10 +18,34 @@
   如 `ScriptCode`、`Trigger.Type`、`Font.Size`；值按属性类型转换（含枚举名、Color）。
   失败（找不到、只读、转换失败、Openness 拒绝）一律报错，不返回「成功 + 一句说明」。
 
+- **新工具 `ApplyHmiOperations`**：一次调用跑一批 HMI 编辑
+  （`SetAttribute|GetAttribute|SetProperty|GetProperty|Bind|SetScript|Delete|Invoke`）。
+  画面与画面项每批只解析一次，整批在一个 `TiaPortal.ExclusiveAccess` 里执行（可选一个
+  Transaction），每条操作各报 ok/error，失败不打断整批。`runAsync=true` 立即返回 jobId，
+  用新工具 **`GetHmiOperationsJob`** 轮询进度与结果（不碰 TIA，作业运行中也能答）。
+  作业运行期间其它碰 TIA 的工具等 2 秒后报「busy」，而不是排在后面卡到 HTTP 超时。
+- **新工具 `GetToolTimings`**：服务器内部按工具统计调用次数与总/平均/最大耗时，
+  改动前后的发布时间可以量，而不是猜。HMI 步骤工具的 meta 新增 `elapsedMs`，
+  `BindUnifiedHmiTagDynamization` 新增 `resolveMs` / `bindMs`，`InvokeObject` 新增
+  `resolveMs` / `invokeMs`。
+- **`--http-timeout <秒>`**：HTTP 单次请求等响应的上限，默认由 30 秒提到 300 秒。
+
 ### 变更
 
 - `InvokeObject` 的返回值若是 Openness 对象，不再整个交给 JSON 序列化，
   只返回 `{Type, Name?, PropertyName?}`，足以再次按路径寻址。
+- **按名查找不再逐项遍历整个集合。** 原来每查一个画面项都要把 `ScreenItems` 全部走一遍、
+  逐个跨进程读 `Name`；`ApplyUnifiedHmiScreenDesignJson` 每项查一次，493 项的画面约
+  12 万次跨进程调用。现在先用组合自带的 `Find(name)`（一次调用），未命中再查一份每个集合
+  只建一次的、大小写不敏感的名字索引；缓存命中时重读一次 `Name` 校验（已删除/改名的对象
+  不会被返回）。画面查找（含画面分组）同样缓存。所有走 `FindExistingByName` /
+  `TryFindScreenByName` 的工具都受益。
+
+### 修复
+
+- **HTTP 请求超时后，下一个请求可能收不到自己的响应。** 超时时读响应的后台任务还挂在同一个
+  `StreamReader` 上，锁却已释放；下一个请求再开一个读任务，两个并发读同一个流。
+  现在超时的请求一直持锁，直到它迟到的响应被读走。
 
 ## [2.7.3] - 2026-09-16 - 写 Unified JS 脚本不再赌上整个博途进程；画面分组里的画面不再隐形
 

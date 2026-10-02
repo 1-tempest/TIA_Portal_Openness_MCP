@@ -84,14 +84,17 @@
     }
   },
   "capabilities": {
-    "mcpToolCount": 223,
+    "mcpToolCount": 226,
     "mcpToolLayers": {
-      "L0": 9,
+      "L0": 10,
       "L1": 38,
-      "L2": 165
+      "L2": 167
     },
     "newToolsThisRelease": [
-      "SetObjectProperty (v2.8.0)"
+      "SetObjectProperty (v2.8.0)",
+      "ApplyHmiOperations (v2.8.0)",
+      "GetHmiOperationsJob (v2.8.0)",
+      "GetToolTimings (v2.8.0)"
     ],
     "removedToolsThisRelease": [],
     "hmiTemplateJsonCount": 8,
