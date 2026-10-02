@@ -967,6 +967,26 @@ handler, then runs SyntaxCheck.
 End-to-end recipe (Connect → tags → screen → design → button actions → Save)
 matches **§12** in this file; exercise it on your own Unified RT project.
 
+### Reaching objects no dedicated tool covers (v2.8.0)
+
+- `objectKind=HmiPath`, `objectPath="<hmiSoftware>/<seg>/<seg>/..."` works with
+  `DescribeObject` / `GetObjectProperty` / `ListObjectChildren` / `InvokeObject` /
+  `SetObjectProperty`. Each segment is a public property name, otherwise (on a
+  collection) the member whose `Name` matches (case-insensitive), or `[n]` by index.
+  Property names win over member names; use `[n]` when they clash.
+  `objectKind=Path` does the same from the Project root.
+  - `HMI_RT_1/TextLists/TL_RamState/Entries`
+  - `HMI_RT_1/Screens/Home/ScreenItems/Btn1/Dynamizations/[0]`
+  - Screens inside a screen group: `HMI_RT_1/ScreenGroups/<group>/Screens/<screen>`.
+- Generic methods via `InvokeObject`: `methodName="Create<ScriptDynamization>"`,
+  `args=["BackColor"]`, `allowWrite=true`. The type argument is matched by simple or full
+  name in the loaded `Siemens.Engineering*` assemblies; on ambiguity the error lists the
+  full names. A returned Openness object comes back as `{Type, Name?, PropertyName?}`
+  so you can address it again by path.
+- `SetObjectProperty` writes a plain CLR property (dotted path, e.g. `ScriptCode`,
+  `Trigger.Type`, `Font.Size`); values are converted to the property type (enum by name,
+  Color as `#RRGGBB` / `0xAARRGGBB`). Use `InvokeObject SetAttribute` for attributes.
+
 ## 13. Real download — V21 cast bug (FIXED 2026-06-17, verified on a real CPU)
 
 `DownloadToPlc(softwarePath=…)` used to fail on V21 with:

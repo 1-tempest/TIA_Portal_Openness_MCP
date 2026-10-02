@@ -1726,9 +1726,80 @@ namespace TiaMcpServer.Siemens
                     return null;
                 }
 
+                case "hmipath":
+                case "hmi_path":
+                case "hmi-path":
+                {
+                    // objectPath: "HMI_RT_1/TextLists/TL_RamState/Entries"
+                    // 前缀（最短可解析的那段）= HMI 软件路径，其余逐段走反射：属性名 → 属性值；
+                    // 否则在集合里按 Name 匹配，或 [n] 取下标。
+                    var segs = SplitObjectPath(objectPath);
+                    for (int n = 1; n <= segs.Count; n++)
+                    {
+                        object? sw = null;
+                        try { sw = GetSoftwareContainer(string.Join("/", segs.Take(n)))?.Software; }
+                        catch { }
+                        if (sw != null) return WalkObjectPath(sw, segs.Skip(n));
+                    }
+                    return null;
+                }
+
+                case "path":
+                    // objectPath 从 Project 起步，例如 "Devices/PLC_1/DeviceItems/[1]"
+                    return WalkObjectPath(_project!, SplitObjectPath(objectPath));
+
                 default:
                     return null;
             }
+        }
+
+        private static List<string> SplitObjectPath(string? objectPath)
+            => (objectPath ?? string.Empty).Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(s => s.Trim()).Where(s => s.Length > 0).ToList();
+
+        private static object? WalkObjectPath(object root, IEnumerable<string> segments)
+        {
+            object? current = root;
+            foreach (var seg in segments)
+            {
+                if (current == null) return null;
+
+                // 不用 GetProperty(name)：派生类用 new 遮蔽的属性会抛 AmbiguousMatchException。
+                var p = current.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance)
+                    .Where(x => x.GetIndexParameters().Length == 0
+                                && x.Name.Equals(seg, StringComparison.OrdinalIgnoreCase))
+                    .OrderBy(x => x.Name == seg ? 0 : 1)
+                    .FirstOrDefault();
+                if (p != null)
+                {
+                    current = p.GetValue(current);
+                    continue;
+                }
+
+                if (current is not IEnumerable en || current is string) return null;
+
+                object? next = null;
+                if (seg.StartsWith("[") && seg.EndsWith("]")
+                    && int.TryParse(seg.Substring(1, seg.Length - 2), out var index))
+                {
+                    next = en.Cast<object?>().Skip(index).FirstOrDefault();
+                }
+                else
+                {
+                    foreach (var it in en)
+                    {
+                        var n = TryGetName(it);
+                        if (!string.IsNullOrWhiteSpace(n) &&
+                            string.Equals(n!.Trim(), seg, StringComparison.OrdinalIgnoreCase))
+                        {
+                            next = it;
+                            break;
+                        }
+                    }
+                }
+                current = next;
+            }
+            return current;
         }
 
         private static string? TryGetName(object? o)
@@ -2000,8 +2071,16 @@ namespace TiaMcpServer.Siemens
             try
             {
                 var t = instance.GetType();
+
+                // 泛型方法：methodName = "Create<ScriptDynamization>"，类型参数按简单名或全名
+                // 在已加载的 Siemens.Engineering* 程序集里找。
+                var generic = Regex.Match(methodName, @"^\s*(\w+)\s*<\s*([\w.+]+)\s*>\s*$");
+                var baseName = generic.Success ? generic.Groups[1].Value : methodName;
                 var methods = t.GetMethods(BindingFlags.Public | BindingFlags.Instance)
-                    .Where(m => !m.IsSpecialName && m.Name.Equals(methodName, StringComparison.OrdinalIgnoreCase))
+                    .Where(m => !m.IsSpecialName && m.Name.Equals(baseName, StringComparison.OrdinalIgnoreCase))
+                    .Where(m => generic.Success
+                        ? m.IsGenericMethodDefinition && m.GetGenericArguments().Length == 1
+                        : !m.IsGenericMethodDefinition)
                     .ToList();
 
                 MethodInfo? mi = methods.FirstOrDefault(m => m.GetParameters().Length == argValues.Count);
@@ -2009,10 +2088,27 @@ namespace TiaMcpServer.Siemens
                 {
                     return new ModelContextProtocol.ResponseObjectValue
                     {
-                        Message = "Method not found (signature mismatch)",
+                        Message = generic.Success
+                            ? $"Generic method '{baseName}<T>' with {argValues.Count} parameter(s) not found"
+                            : "Method not found (signature mismatch)",
                         ObjectKind = resultKind,
                         ObjectPath = resultPath
                     };
+                }
+
+                if (generic.Success)
+                {
+                    var typeArg = FindEngineeringTypeArgument(generic.Groups[2].Value, mi.GetGenericArguments()[0], out var typeError);
+                    if (typeArg == null)
+                    {
+                        return new ModelContextProtocol.ResponseObjectValue
+                        {
+                            Message = typeError,
+                            ObjectKind = resultKind,
+                            ObjectPath = resultPath
+                        };
+                    }
+                    mi = mi.MakeGenericMethod(typeArg);
                 }
 
                 var ps = mi.GetParameters();
@@ -2055,6 +2151,11 @@ namespace TiaMcpServer.Siemens
                         if (items.Count >= 200) break;
                     }
                     outValue = items;
+                }
+                else if (IsEngineeringObject(result))
+                {
+                    // 别把整个 Openness 对象交给 JSON 序列化：只回能再次寻址它的信息。
+                    outValue = DescribeEngineeringObjectRef(result!);
                 }
 
                 return new ModelContextProtocol.ResponseObjectValue
@@ -2149,6 +2250,141 @@ namespace TiaMcpServer.Siemens
                     + "for objectKind=Block/Type also pass softwarePath.");
             }
             return InvokeOnInstance(o, objectKind, objectPath, methodName, args, allowWrite);
+        }
+
+        /// <summary>
+        /// 写一个普通 CLR 属性（不是 SetAttribute 的「属性」）。propertyPath 可带点，
+        /// 例如 "ScriptCode"、"Font.Size"；值按属性类型转换（含枚举、Color）。
+        /// </summary>
+        public ModelContextProtocol.ResponseObjectValue SetObjectProperty(string objectKind, string objectPath, string propertyPath, object? value, string softwarePath = "")
+        {
+            var o = ResolveObject(objectKind, objectPath, softwarePath);
+            if (o == null)
+            {
+                throw new PortalException(PortalErrorCode.NotFound,
+                    $"{objectKind} '{objectPath}' not found. Resolve the exact path first "
+                    + "(GetProjectTree / GetDeviceItemTree / GetSoftwareTree / GetBlocksWithHierarchy); "
+                    + "for objectKind=Block/Type also pass softwarePath.");
+            }
+
+            var parts = (propertyPath ?? string.Empty).Split(new[] { '.' }, StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length == 0)
+            {
+                throw new PortalException(PortalErrorCode.InvalidParams, "propertyPath is empty.");
+            }
+
+            var owner = parts.Length == 1 ? o : GetPropertyPathValue(o, string.Join(".", parts.Take(parts.Length - 1)));
+            if (owner == null)
+            {
+                throw new PortalException(PortalErrorCode.NotFound,
+                    $"'{string.Join(".", parts.Take(parts.Length - 1))}' not found (or null) on {objectKind} '{objectPath}'.");
+            }
+
+            var propName = parts[parts.Length - 1];
+            var hardDenyReason = GetHardDeniedReflectionReason(owner, objectKind, objectPath, "Set" + propName);
+            if (!string.IsNullOrWhiteSpace(hardDenyReason))
+            {
+                throw new PortalException(PortalErrorCode.InvalidParams, hardDenyReason!);
+            }
+
+            var p = owner.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance)
+                .Where(x => x.GetIndexParameters().Length == 0
+                            && x.Name.Equals(propName, StringComparison.OrdinalIgnoreCase))
+                .OrderBy(x => x.Name == propName ? 0 : 1)
+                .FirstOrDefault();
+            if (p == null || !p.CanWrite || p.SetMethod == null || !p.SetMethod.IsPublic)
+            {
+                throw new PortalException(PortalErrorCode.InvalidParams,
+                    $"Property '{propName}' on {owner.GetType().FullName} "
+                    + (p == null ? "does not exist." : "is read-only.")
+                    + " Use DescribeObject to list properties, or InvokeObject SetAttribute for attributes.");
+            }
+
+            object? typed;
+            try
+            {
+                typed = CoerceReflectionValue(value, p.PropertyType);
+            }
+            catch (Exception ex)
+            {
+                var hint = p.PropertyType.IsEnum ? $" Allowed: {string.Join(", ", Enum.GetNames(p.PropertyType))}." : "";
+                throw new PortalException(PortalErrorCode.InvalidParams,
+                    $"Cannot convert '{value}' to {p.PropertyType.FullName}: {ex.Message}.{hint}", null, ex);
+            }
+
+            try
+            {
+                p.SetValue(owner, typed);
+            }
+            catch (TargetInvocationException tie)
+            {
+                var inner = tie.InnerException ?? tie;
+                throw new PortalException(PortalErrorCode.OpennessError,
+                    $"Setting {propertyPath} failed: {inner.Message}", null, inner);
+            }
+
+            var readBack = p.CanRead ? p.GetValue(owner) : null;
+            return new ModelContextProtocol.ResponseObjectValue
+            {
+                Message = "OK",
+                ObjectKind = objectKind,
+                ObjectPath = $"{objectPath}.{propertyPath}",
+                ValueType = p.PropertyType.FullName ?? p.PropertyType.Name,
+                Value = IsEngineeringObject(readBack) ? DescribeEngineeringObjectRef(readBack!) : readBack?.ToString()
+            };
+        }
+
+        private static bool IsEngineeringObject(object? o)
+        {
+            if (o == null || o is string || o.GetType().IsPrimitive || o.GetType().IsEnum) return false;
+            return (o.GetType().Namespace ?? "").StartsWith("Siemens.Engineering", StringComparison.Ordinal);
+        }
+
+        private static Dictionary<string, string?> DescribeEngineeringObjectRef(object o)
+        {
+            var d = new Dictionary<string, string?> { ["Type"] = o.GetType().FullName ?? o.GetType().Name };
+            foreach (var key in new[] { "Name", "PropertyName" })
+            {
+                var v = TryGetPropertyValue(o, key);
+                if (v != null) d[key] = v.ToString();
+            }
+            return d;
+        }
+
+        /// <summary>
+        /// 泛型方法的类型参数：先全名精确匹配，再简单名；只在 Siemens.Engineering* 程序集里找，
+        /// 多个同名时按泛型约束筛，仍不唯一就报歧义并列出全名。
+        /// </summary>
+        private static Type? FindEngineeringTypeArgument(string typeName, Type genericParameter, out string error)
+        {
+            error = "";
+            var all = new List<Type>();
+            foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                if (!(asm.GetName().Name ?? "").StartsWith("Siemens.Engineering", StringComparison.OrdinalIgnoreCase)) continue;
+                Type[] types;
+                try { types = asm.GetTypes(); }
+                catch (ReflectionTypeLoadException rtle) { types = rtle.Types.Where(x => x != null).ToArray()!; }
+                catch { continue; }
+                all.AddRange(types.Where(x => x.IsPublic
+                    && (string.Equals(x.FullName, typeName, StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(x.Name, typeName, StringComparison.OrdinalIgnoreCase))));
+            }
+
+            var exact = all.Where(x => string.Equals(x.FullName, typeName, StringComparison.OrdinalIgnoreCase)).ToList();
+            var candidates = (exact.Count > 0 ? exact : all).Distinct().ToList();
+            if (candidates.Count > 1)
+            {
+                var constraints = genericParameter.GetGenericParameterConstraints();
+                var fitting = candidates.Where(c => constraints.All(k => k.IsAssignableFrom(c))).ToList();
+                if (fitting.Count > 0) candidates = fitting;
+            }
+
+            if (candidates.Count == 1) return candidates[0];
+            error = candidates.Count == 0
+                ? $"Type '{typeName}' not found in loaded Siemens.Engineering assemblies."
+                : $"Type '{typeName}' is ambiguous; use the full name: {string.Join(", ", candidates.Select(c => c.FullName))}.";
+            return null;
         }
 
         private static Type? FindTypeBySuffix(string typeSuffix)

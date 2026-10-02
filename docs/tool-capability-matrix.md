@@ -366,8 +366,9 @@
 
 | Tool | Description |
 |---|---|
-| DescribeObject | [L2][Reflection]Describe an Openness object via reflection. Use this first when a natural-language TIA operation has no direct MCP tool. objectKind: Project\|Portal\|Device\|DeviceItem\|Software\|Block\|Type\|HmiScreen\|HmiTag\|HmiScreenItem |
+| DescribeObject | [L2][Reflection]Describe an Openness object via reflection. Use this first when a natural-language TIA operation has no direct MCP tool. objectKind: Project\|Portal\|Device\|DeviceItem\|Software\|Block\|Type\|HmiScreen\|HmiTag\|HmiScreenItem\|HmiPath\|Path |
 | GetObjectProperty | [L2][Reflection]Get an Openness object property by dotted path. Use after DescribeObject/DescribeObjectProperty to safely inspect current state before writing. |
+| SetObjectProperty | [L2][Reflection]Set a plain public Openness property (not an attribute) by dotted path, e.g. ScriptCode, Trigger.Type, Font.Size. Value converted to the property type (incl. enums, Color). |
 | ListObjectChildren | [L2][Reflection]List child items from an enumerable Openness property, e.g. Devices, DeviceItems, Connections, Screens, Blocks. Use to discover paths instead of guessing. |
 | InvokeObject | [L2][Reflection]Invoke an Openness method via reflection. Default is read-oriented; set allowWrite=true only after DescribeObject confirms the target method/signature. This is the generic bridge for public API operations not yet wrapped by MCP. |
 | DescribeService | [L2][Reflection]GetService bridge: describe a service object (by type name suffix) from a target object. |

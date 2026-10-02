@@ -1,5 +1,28 @@
 ﻿# Change Log
 
+## [2.8.0] - 2026-10-02 - 反射桥能走到任意 Openness 子对象；泛型方法；写普通属性
+
+### 新增
+
+- **`objectKind=HmiPath`（别名 `hmi_path` / `hmi-path`）与 `objectKind=Path`。**
+  `ResolveObject` 原来只认固定的几种对象，`HmiSoftware.TextLists`、报警、画面项的
+  `Dynamizations` 等子对象，`DescribeObject` / `GetObjectProperty` /
+  `ListObjectChildren` / `InvokeObject` 都够不着。现在 `objectPath` 写成
+  `"HMI_RT_1/TextLists/TL_RamState/Entries"`：开头是 HMI 软件路径，其后每段是公有属性名，
+  否则在集合里按 `Name`（不区分大小写）或 `[n]` 下标取成员。`Path` 同理，从 Project 起步。
+- **`InvokeObject` 支持泛型方法**：`methodName="Create<ScriptDynamization>"`。按名称与
+  元数 1 找泛型定义，类型参数在已加载的 `Siemens.Engineering*` 程序集里按简单名或全名解析
+  （同名多个时按泛型约束筛，仍不唯一就报歧义并列出全名），`MakeGenericMethod` 后调用。
+  仍受 `allowWrite` 约束。
+- **新工具 `SetObjectProperty`**：按点路径写普通 CLR 属性（不是 `SetAttribute` 的属性），
+  如 `ScriptCode`、`Trigger.Type`、`Font.Size`；值按属性类型转换（含枚举名、Color）。
+  失败（找不到、只读、转换失败、Openness 拒绝）一律报错，不返回「成功 + 一句说明」。
+
+### 变更
+
+- `InvokeObject` 的返回值若是 Openness 对象，不再整个交给 JSON 序列化，
+  只返回 `{Type, Name?, PropertyName?}`，足以再次按路径寻址。
+
 ## [2.7.3] - 2026-09-16 - 写 Unified JS 脚本不再赌上整个博途进程；画面分组里的画面不再隐形
 
 ### 修复

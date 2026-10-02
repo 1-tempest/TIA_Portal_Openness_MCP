@@ -2,7 +2,7 @@
   "package": "TIA_MCP_Delivery_v2.4.0",
   "generatedAt": "2026-09-16T17:25:02.533852+08:00",
   "source": "live MCP tools/list of TiaMcpServer.exe",
-  "toolCount": 222,
+  "toolCount": 223,
   "note": "Full roster (--profile full). The default lite profile lists ~49 of these; the rest stay reachable via FindTools + CallTool. Runtime tools/list remains authoritative.",
   "tools": [
     {
@@ -754,7 +754,7 @@
         "softwarePath",
         "maxMembers"
       ],
-      "description": "[L2][Reflection]Describe an Openness object via reflection. Use this first when a natural-language TIA operation has no direct MCP tool. objectKind: Project|Portal|Device|DeviceItem|Software|Block|Type|HmiScreen|HmiTag|HmiScreenItem"
+      "description": "[L2][Reflection]Describe an Openness object via reflection. Use this first when a natural-language TIA operation has no direct MCP tool. objectKind: Project|Portal|Device|DeviceItem|Software|Block|Type|HmiScreen|HmiTag|HmiScreenItem|HmiPath|Path. HmiPath walks \"<hmiSoftware>/<property or member Name or [n]>/...\", Path does the same from the Project."
     },
     {
       "name": "DescribeObjectProperty",
@@ -2655,6 +2655,21 @@
         "dryRun"
       ],
       "description": "[L2][Hardware][Destructive] Preview or change the I/O START ADDRESS of one device item (e.g. move a DI module to start at %I2.0 by passing startAddress=2). Defaults to dryRun=true. startAddress is the ENGINE RAW byte offset, not '2.0'. It writes hardware configuration, so a wrong value does NOT fail compilation — the program silently reads a different module. Read back with GetDeviceItemIoAddresses, then CompileSoftware and SaveProject. Overlapping address ranges are rejected by TIA and reported back with the reason."
+    },
+    {
+      "name": "SetObjectProperty",
+      "layer": "L2",
+      "domain": "Reflection",
+      "method": "SetObjectProperty",
+      "returnType": "",
+      "parameters": [
+        "objectKind",
+        "objectPath",
+        "propertyPath",
+        "value",
+        "softwarePath"
+      ],
+      "description": "[L2][Reflection]Set a plain public Openness property (not an attribute) by dotted path, e.g. ScriptCode, Trigger.Type, Font.Size. The value is converted to the property type (string/number/bool/enum name/Color '#RRGGBB' or 0xAARRGGBB). Read it with GetObjectProperty first; use InvokeObject SetAttribute for attributes."
     },
     {
       "name": "SetOpcUaInterfaceEnabled",

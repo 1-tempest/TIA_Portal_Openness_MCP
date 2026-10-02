@@ -559,9 +559,9 @@ namespace TiaMcpServer.ModelContextProtocol
             }
         }
 
-        [McpServerTool(Name = "DescribeObject"), Description("[L2][Reflection]Describe an Openness object via reflection. Use this first when a natural-language TIA operation has no direct MCP tool. objectKind: Project|Portal|Device|DeviceItem|Software|Block|Type|HmiScreen|HmiTag|HmiScreenItem")]
+        [McpServerTool(Name = "DescribeObject"), Description("[L2][Reflection]Describe an Openness object via reflection. Use this first when a natural-language TIA operation has no direct MCP tool. objectKind: Project|Portal|Device|DeviceItem|Software|Block|Type|HmiScreen|HmiTag|HmiScreenItem|HmiPath|Path. HmiPath walks \"<hmiSoftware>/<property or member Name or [n]>/...\", Path does the same from the Project.")]
         public static ResponseObjectDescribe DescribeObject(
-            [Description("Object kind: Project|Portal|Device|DeviceItem|Software|Block|Type|HmiScreen|HmiTag|HmiScreenItem")] string objectKind,
+            [Description("Object kind: Project|Portal|Device|DeviceItem|Software|Block|Type|HmiScreen|HmiTag|HmiScreenItem|HmiPath|Path")] string objectKind,
             [Description("Object path. For Device/DeviceItem/Software: path in project tree. For Block/Type: blockPath/typePath.")] string objectPath,
             [Description("softwarePath required for Block/Type")] string softwarePath = "",
             [Description("Max member count to return")] int maxMembers = 200)
@@ -584,7 +584,7 @@ namespace TiaMcpServer.ModelContextProtocol
 
         [McpServerTool(Name = "GetObjectProperty"), Description("[L2][Reflection]Get an Openness object property by dotted path. Use after DescribeObject/DescribeObjectProperty to safely inspect current state before writing.")]
         public static ResponseObjectValue GetObjectProperty(
-            [Description("Object kind: Project|Portal|Device|DeviceItem|Software|Block|Type|HmiScreen|HmiTag|HmiScreenItem")] string objectKind,
+            [Description("Object kind: Project|Portal|Device|DeviceItem|Software|Block|Type|HmiScreen|HmiTag|HmiScreenItem|HmiPath|Path")] string objectKind,
             [Description("Object path. For Device/DeviceItem/Software: path in project tree. For Block/Type: blockPath/typePath.")] string objectPath,
             [Description("Property path, e.g. Name or BlockGroup.Groups")] string propertyPath,
             [Description("softwarePath required for Block/Type")] string softwarePath = "")
@@ -605,9 +605,42 @@ namespace TiaMcpServer.ModelContextProtocol
             }
         }
 
+        [McpServerTool(Name = "SetObjectProperty"), Description("[L2][Reflection]Set a plain public Openness property (not an attribute) by dotted path, e.g. ScriptCode, Trigger.Type, Font.Size. The value is converted to the property type (string/number/bool/enum name/Color '#RRGGBB' or 0xAARRGGBB). Read it with GetObjectProperty first; use InvokeObject SetAttribute for attributes.")]
+        public static ResponseObjectValue SetObjectProperty(
+            [Description("Object kind: Project|Portal|Device|DeviceItem|Software|Block|Type|HmiScreen|HmiTag|HmiScreenItem|HmiPath|Path")] string objectKind,
+            [Description("Object path. For HmiPath: \"<hmiSoftware>/<prop or member>/...\", e.g. HMI_RT_1/Screens/Home/ScreenItems/Btn1/Dynamizations/[0].")] string objectPath,
+            [Description("Property path, e.g. ScriptCode or Font.Size")] string propertyPath,
+            [Description("New value (JSON string, number or bool)")] System.Text.Json.JsonElement value,
+            [Description("softwarePath required for Block/Type")] string softwarePath = "")
+        {
+            try
+            {
+                object? v = value.ValueKind switch
+                {
+                    System.Text.Json.JsonValueKind.String => value.GetString(),
+                    System.Text.Json.JsonValueKind.True => true,
+                    System.Text.Json.JsonValueKind.False => false,
+                    System.Text.Json.JsonValueKind.Number => value.TryGetInt64(out var l) ? l : (object)value.GetDouble(),
+                    System.Text.Json.JsonValueKind.Null => null,
+                    _ => value.GetRawText()
+                };
+                return Portal.SetObjectProperty(objectKind, objectPath, propertyPath, v, softwarePath);
+            }
+            catch (PortalException pex)
+            {
+                throw new McpException(pex.Message, pex,
+                    pex.Code == PortalErrorCode.NotFound || pex.Code == PortalErrorCode.InvalidParams
+                        ? McpErrorCode.InvalidParams : McpErrorCode.InternalError);
+            }
+            catch (Exception ex) when (ex is not McpException)
+            {
+                throw new McpException($"Unexpected error setting property: {ex.Message}{McpHints.Recovery(ex)}", ex, McpErrorCode.InternalError);
+            }
+        }
+
         [McpServerTool(Name = "ListObjectChildren"), Description("[L2][Reflection]List child items from an enumerable Openness property, e.g. Devices, DeviceItems, Connections, Screens, Blocks. Use to discover paths instead of guessing.")]
         public static ResponseObjectChildren ListObjectChildren(
-            [Description("Object kind: Project|Portal|Device|DeviceItem|Software|Block|Type|HmiScreen|HmiTag|HmiScreenItem")] string objectKind,
+            [Description("Object kind: Project|Portal|Device|DeviceItem|Software|Block|Type|HmiScreen|HmiTag|HmiScreenItem|HmiPath|Path")] string objectKind,
             [Description("Object path. For Device/DeviceItem/Software: path in project tree. For Block/Type: blockPath/typePath.")] string objectPath,
             [Description("Enumerable property name/path, e.g. Devices, DeviceItems, BlockGroup.Blocks")] string collectionProperty,
             [Description("softwarePath required for Block/Type")] string softwarePath = "",
@@ -631,9 +664,9 @@ namespace TiaMcpServer.ModelContextProtocol
 
         [McpServerTool(Name = "InvokeObject"), Description("[L2][Reflection]Invoke an Openness method via reflection. Default is read-oriented; set allowWrite=true only after DescribeObject confirms the target method/signature. This is the generic bridge for public API operations not yet wrapped by MCP.")]
         public static ResponseObjectValue InvokeObject(
-            [Description("Object kind: Project|Portal|Device|DeviceItem|Software|Block|Type|HmiScreen|HmiTag|HmiScreenItem")] string objectKind,
+            [Description("Object kind: Project|Portal|Device|DeviceItem|Software|Block|Type|HmiScreen|HmiTag|HmiScreenItem|HmiPath|Path")] string objectKind,
             [Description("Object path. For Device/DeviceItem/Software: path in project tree. For Block/Type: blockPath/typePath.")] string objectPath,
-            [Description("Method name (case-insensitive)")] string methodName,
+            [Description("Method name (case-insensitive). Generic methods: Name<TypeName>, e.g. Create<ScriptDynamization> (simple or full type name)")] string methodName,
             [Description("JSON array of args, e.g. [\"AttrName\"]. Empty for no args.")] System.Text.Json.JsonElement[]? args = null,
             [Description("softwarePath required for Block/Type")] string softwarePath = "",
             [Description("Allow write/dangerous methods. Default false.")] bool allowWrite = false)
