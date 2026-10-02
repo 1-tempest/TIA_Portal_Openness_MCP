@@ -1730,6 +1730,14 @@ namespace TiaMcpServer.Siemens
             {
                 if (current == null) return null;
 
+                // "@service:UmacConfigurator" → current.GetService<UmacConfigurator>()（与 DescribeService 同一套解析），
+                // 例如 Path "@service:UmacConfigurator/CustomRoles"。
+                if (seg.StartsWith("@service:", StringComparison.OrdinalIgnoreCase))
+                {
+                    current = ResolveServiceSegment(current, seg.Substring("@service:".Length));
+                    continue;
+                }
+
                 // 不用 GetProperty(name)：派生类用 new 遮蔽的属性会抛 AmbiguousMatchException。
                 var p = GetPropertyRobust(current, seg);
                 if (p != null)
@@ -2090,6 +2098,21 @@ namespace TiaMcpServer.Siemens
                             .GetMethod("GetAttribute", new[] { typeof(string) })
                             ?.Invoke(instance, new object[] { attrName });
                         converted[i] = oldValue == null ? av : CoerceReflectionValue(av, oldValue.GetType());
+                        continue;
+                    }
+                    if (pt == typeof(System.Security.SecureString))
+                    {
+                        var secure = new System.Security.SecureString();
+                        foreach (var ch in av.ToString() ?? "") secure.AppendChar(ch);
+                        secure.MakeReadOnly();
+                        converted[i] = secure;
+                        continue;
+                    }
+                    if (av is string reference && pt != typeof(string) && !pt.IsEnum && !pt.IsPrimitive
+                        && (reference.StartsWith("@path:", StringComparison.OrdinalIgnoreCase) || reference.StartsWith("@hmipath:", StringComparison.OrdinalIgnoreCase)))
+                    {
+                        converted[i] = _argPathResolver?.Invoke(reference)
+                            ?? throw new ArgumentException($"Argument {i} '{reference}' did not resolve to an object.");
                         continue;
                     }
                     if (pt == typeof(System.IO.DirectoryInfo) || pt == typeof(System.IO.FileInfo))
@@ -2678,6 +2701,21 @@ namespace TiaMcpServer.Siemens
             return new System.IO.FileInfo(full);
         }
 
+        private static Func<string, object?>? _argPathResolver;
+
+        /// <summary>
+        /// Object-valued method argument given as a reference: "@path:&lt;Path from the Project&gt;"
+        /// (e.g. "@path:@service:UmacConfigurator/CustomRoles/Operator") or "@hmipath:&lt;HmiPath&gt;".
+        /// </summary>
+        private object? ResolveArgumentPath(string reference)
+        {
+            if (reference.StartsWith("@hmipath:", StringComparison.OrdinalIgnoreCase))
+                return ResolveObject("hmipath", reference.Substring("@hmipath:".Length), "");
+            if (reference.StartsWith("@path:", StringComparison.OrdinalIgnoreCase))
+                return ResolveObject("path", reference.Substring("@path:".Length), "");
+            return null;
+        }
+
         private static bool IsPathKind(string? kind)
         {
             var k = (kind ?? "").Trim().ToLowerInvariant();
@@ -2702,6 +2740,33 @@ namespace TiaMcpServer.Siemens
                 n++;
             }
             return -1;
+        }
+
+        /// <summary>
+        /// Service for a "@service:&lt;Type&gt;" path segment. Exact simple/full type name in the
+        /// Siemens.Engineering* assemblies first, then the DescribeService suffix rule.
+        /// Force-related services stay denied, as in DescribeService/InvokeService.
+        /// </summary>
+        private static object? ResolveServiceSegment(object target, string typeName)
+        {
+            var name = (typeName ?? "").Trim();
+            if (name.Length == 0 || name.IndexOf("Force", StringComparison.OrdinalIgnoreCase) >= 0) return null;
+
+            Type? st = null;
+            foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                if (!(asm.GetName().Name ?? "").StartsWith("Siemens.Engineering", StringComparison.OrdinalIgnoreCase)) continue;
+                Type[] types;
+                try { types = asm.GetTypes(); }
+                catch (ReflectionTypeLoadException rtle) { types = rtle.Types.Where(x => x != null).ToArray()!; }
+                catch { continue; }
+                st = types.FirstOrDefault(x => x.IsPublic
+                    && (string.Equals(x.FullName, name, StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(x.Name, name, StringComparison.OrdinalIgnoreCase)));
+                if (st != null) break;
+            }
+            st ??= FindTypeBySuffix(name);
+            return st == null ? null : TryGetService(target, st);
         }
 
         private static Type? FindTypeBySuffix(string typeSuffix)

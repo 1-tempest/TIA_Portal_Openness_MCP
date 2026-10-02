@@ -1,5 +1,17 @@
 ﻿# Change Log
 
+## [2.8.4] - 2026-10-02 - 路径里能走 GetService；对象参数按路径引用；SecureString 参数
+
+### 新增
+
+- **路径段 `@service:<类型>`**：在当前对象上调 `GetService<类型>()`（类型按简单名/全名找，再退回
+  DescribeService 的后缀规则；含 Force 的服务照旧拒绝）。`objectKind=Path` 从 Project 起步，例如
+  `@service:UmacConfigurator/CustomRoles`，于是 CustomRoles / ProjectUsers / CustomDeviceFunctionRights
+  能用现有的 DescribeObject / ListObjectChildren / InvokeObject（Create… 返回新成员 Path）/ SetObjectProperty 操作。
+- **对象型方法参数按路径引用**：字符串参数 `"@path:<Path>"` / `"@hmipath:<HmiPath>"` 解析成对象再传，
+  例如 `ProjectUser.Roles.Add(Role)`、`CustomRole.AssignDeviceFunctionRight(UmacDevice, DeviceFunctionRight)`。
+- **`SecureString` 参数**由字符串转换（`ProjectUsers.Create(name, password)`、`SetPassword`）。
+
 ## [2.8.3] - 2026-10-02 - TIA 崩溃后自动恢复；多语言文本按字符串写
 
 ### 新增

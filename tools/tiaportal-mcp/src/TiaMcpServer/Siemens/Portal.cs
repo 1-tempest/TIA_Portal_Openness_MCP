@@ -74,6 +74,8 @@ namespace TiaMcpServer.Siemens
         public Portal(ILogger<Portal>? logger = null)
         {
             _logger = logger;
+            // Object-valued reflection args given as "@path:..." / "@hmipath:..." resolve against this instance.
+            _argPathResolver = ResolveArgumentPath;
         }
 
         #endregion

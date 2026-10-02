@@ -1041,6 +1041,22 @@ empty list) and TIA crashed shortly after. Not reproduced, no known Siemens issu
 return an empty attribute list anyway: use `DescribeObject` (CLR properties) instead of
 `GetAttributeInfos`, and save before experimenting on alarms.
 
+### Project services in paths: UMAC users and roles (v2.8.4)
+
+A path segment `@service:<Type>` calls `GetService<Type>()` on the current object (type by simple or
+full name; Force-related services stay denied). With `objectKind=Path` (rooted at the Project):
+
+- `DescribeObject Path "@service:UmacConfigurator"` → AnonymousUser, CustomRoles, ProjectUsers,
+  CustomDeviceFunctionRights, EngineeringFunctionRights, SystemRoles, UmcUserGroups, UmcUsers.
+- Create (V21 signatures): `InvokeObject Path "@service:UmacConfigurator/CustomRoles" Create ["Operator","comment"]`;
+  `…/ProjectUsers` `Create ["op1","<password>"]` (string → SecureString);
+  `…/CustomDeviceFunctionRights` `Create [s1, s2, s3]` (three strings, see DescribeObject).
+  Each returns the new member's `Path`.
+- Edit: `SetObjectProperty` for `Comment`, `SessionTimeOut`, …; read-only names via `InvokeObject SetName`;
+  passwords via `SetPassword ["…"]`.
+- Object arguments by reference: `"@path:<Path>"` or `"@hmipath:<HmiPath>"`, e.g. add a role to a user:
+  `InvokeObject Path "@service:UmacConfigurator/ProjectUsers/op1/Roles" Add ["@path:@service:UmacConfigurator/CustomRoles/Operator"] allowWrite=true`.
+
 ### TIA crash recovery (v2.8.3)
 
 Before every TIA tool call the server checks that the TIA process it is bound to is still alive
