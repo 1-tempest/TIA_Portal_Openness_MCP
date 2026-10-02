@@ -1012,6 +1012,12 @@ Entry members: `Value`, `AlternateValue`, `Flashing`, `FlashingRate`; Range adds
 ]
 ```
 
+Verified on V21 (2.8.1): works for BackColor. **Not for Text**: TIA refuses mapping-table entries
+on a Text (MultilingualText) dynamization, and a Text dynamization left with ConditionType=Range and
+no entries crashes the HMI compile. SetProperty of ConditionType warns in that case; reset it to
+`None` or delete the dynamization. Check an entry's `Value` really is a colour with `GetProperty`
+→ `valueType` = `System.Drawing.Color` (not `System.String`).
+
 Script dynamization (needs runtime scripts): `Invoke` `Create<ScriptDynamization>` with
 `args:["BackColor"]` on `…/Dynamizations`, then `SetProperty` `ScriptCode`, `Trigger.Type`=`Tags`,
 `Trigger.Tags`=`["State_Int"]` on `…/Dynamizations/BackColor`.

@@ -2315,7 +2315,7 @@ namespace TiaMcpServer.Siemens
             }
 
             var readBack = p.CanRead ? p.GetValue(owner) : null;
-            return new ModelContextProtocol.ResponseObjectValue
+            var response = new ModelContextProtocol.ResponseObjectValue
             {
                 Message = "OK",
                 ObjectKind = objectKind,
@@ -2323,6 +2323,37 @@ namespace TiaMcpServer.Siemens
                 ValueType = used?.GetType().FullName ?? p.PropertyType.FullName ?? p.PropertyType.Name,
                 Value = FormatReadBack(readBack)
             };
+
+            var warning = MappingTableConditionWarning(owner, p.Name, used);
+            if (warning != null)
+            {
+                response.Message = "OK (warning)";
+                response.Meta = new JsonObject { ["warning"] = warning };
+            }
+            return response;
+        }
+
+        /// <summary>
+        /// Verified on V21: TIA refuses mapping-table entries on a Text (MultilingualText) dynamization
+        /// ("Creation of Tag dynamization entries is not allowed for this property"), and a Text
+        /// dynamization left with a condition type but no entries makes the HMI compile crash.
+        /// Not blocked (the set itself succeeds and may be undone), only reported.
+        /// </summary>
+        private static string? MappingTableConditionWarning(object owner, string propertyName, object? newValue)
+        {
+            if (propertyName != "ConditionType" || owner.GetType().Name != "MappingTable") return null;
+            if (newValue == null || string.Equals(newValue.ToString(), "None", StringComparison.OrdinalIgnoreCase)) return null;
+
+            var dynamized = InferDynamizedPropertyType(owner);
+            if (dynamized == null) return null;
+            var t = Nullable.GetUnderlyingType(dynamized) ?? dynamized;
+            var supported = t.IsPrimitive || t.IsEnum || t == typeof(decimal) || t == typeof(System.Drawing.Color);
+            if (supported) return null;
+
+            return $"The dynamized property is {t.FullName} (not numeric/colour/bool/enum). TIA V21 refuses " +
+                   "mapping-table entries for such properties (e.g. Text), and a dynamization left with " +
+                   $"ConditionType={newValue} and no entries makes the HMI compile crash. Set ConditionType back to " +
+                   "None or delete the dynamization unless entries were accepted.";
         }
 
         private static object? FormatReadBack(object? v)
@@ -2469,7 +2500,8 @@ namespace TiaMcpServer.Siemens
             var d = new Dictionary<string, string?> { ["Type"] = o.GetType().FullName ?? o.GetType().Name };
             foreach (var key in new[] { "Name", "PropertyName" })
             {
-                var v = TryGetPropertyValue(o, key);
+                object? v = null;
+                try { v = GetPropertyRobust(o, key)?.GetValue(o); } catch { }
                 if (v != null) d[key] = v.ToString();
             }
             return d;

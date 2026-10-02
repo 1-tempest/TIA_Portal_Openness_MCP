@@ -1,5 +1,25 @@
 ﻿# Change Log
 
+## [2.8.1] - 2026-10-02 - 新建对象回路径、读值回运行期类型、Text 映射表告警
+
+### 修复
+
+- **`ApplyHmiOperations` 的 `Invoke` 在集合上 `Create…` 只回 `{Type}`**，承诺的 `Path` 没给。
+  批量里的目标用的是内部标识而不是 HmiPath，路径拼接整段被跳过；另外按名读 `PropertyName`
+  时撞上 Openness 用 `new` 重声明的属性（AmbiguousMatchException）被吞，动态化也拿不到名字。
+  现在批量目标按 `<hmi>/Screens/<screen>/ScreenItems/<item>/<sub>`（或 `<hmi>/<path>/<sub>`）
+  构造 HmiPath，新成员返回 `…/Entries/[n]`、`…/Dynamizations/<属性名>`。
+
+### 新增
+
+- **`GetProperty` / `GetAttribute` / `SetProperty`（批量）返回 `valueType`**：值的**运行期** .NET 类型。
+  映射表条目的 `Value` 声明为 object，只有运行期类型能区分真 `System.Drawing.Color` 与字符串。
+- **对非数值/颜色属性（如 Text）的动态化设 `MappingTable.ConditionType` 时给出告警**（不拦）：
+  V21 实测 TIA 拒绝在 Text 上建映射条目（"Creation of Tag dynamization entries is not allowed
+  for this property"），而留着 ConditionType=Range 却没有条目的 Text 动态化会让 HMI 编译崩溃
+  （"Compilation failed. Please contact SIEMENS customer support"）。告警在 `meta.warning`
+  （批量里是该条结果的 `warning`）。
+
 ## [2.8.0] - 2026-10-02 - 反射桥走到任意子对象；HMI 批量编辑与异步作业；按名查找不再逐项遍历
 
 ### 新增

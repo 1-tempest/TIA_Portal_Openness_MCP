@@ -184,7 +184,7 @@ namespace TiaMcpServer.Siemens
                         if (op == null) throw new InvalidOperationException("operation must be a JSON object");
                         var kind = Str(op, "op") ?? throw new InvalidOperationException("'op' is required");
                         result["op"] = kind;
-                        var value = RunHmiOperation(hmi, kind, op, screens, items, result);
+                        var value = RunHmiOperation(hmi, hmiSoftwarePath, kind, op, screens, items, result);
                         if (value != null) result["value"] = value;
                         result["ok"] = true;
                     }
@@ -222,18 +222,20 @@ namespace TiaMcpServer.Siemens
             }
         }
 
-        private JsonNode? RunHmiOperation(object hmi, string kind, JsonObject op, Dictionary<string, object> screens, Dictionary<string, object> items, JsonObject result)
+        private JsonNode? RunHmiOperation(object hmi, string hmiSoftwarePath, string kind, JsonObject op, Dictionary<string, object> screens, Dictionary<string, object> items, JsonObject result)
         {
             var screenName = Str(op, "screen");
             var itemName = Str(op, "item");
             var target = ResolveOperationTarget(hmi, op, screens, items, result);
+            // HmiPath of the target, so results that create objects can return an addressable Path.
+            var targetPath = TargetHmiPath(hmiSoftwarePath, op);
 
             switch (kind.Trim().ToLowerInvariant())
             {
                 case "setattribute":
                 {
                     var name = Str(op, "name") ?? throw new InvalidOperationException("'name' is required");
-                    var r = InvokeOnInstance(target, "HmiOperation", Describe(result), "SetAttribute",
+                    var r = InvokeOnInstance(target, "HmiPath", targetPath, "SetAttribute",
                         new JsonArray(name, op["value"]?.DeepClone()), allowWrite: true);
                     if (r.Message != "OK") throw new InvalidOperationException(r.Message);
                     return null;
@@ -242,22 +244,29 @@ namespace TiaMcpServer.Siemens
                 case "getattribute":
                 {
                     var name = Str(op, "name") ?? throw new InvalidOperationException("'name' is required");
-                    var r = InvokeOnInstance(target, "HmiOperation", Describe(result), "GetAttribute", new JsonArray(name), allowWrite: false);
+                    var r = InvokeOnInstance(target, "HmiPath", targetPath, "GetAttribute", new JsonArray(name), allowWrite: false);
                     if (r.Message != "OK") throw new InvalidOperationException(r.Message);
+                    if (r.ValueType != null) result["valueType"] = r.ValueType;
                     return FormatOperationValue(r.Value);
                 }
 
                 case "setproperty":
                 {
                     var name = Str(op, "name") ?? throw new InvalidOperationException("'name' is required");
-                    var r = SetPropertyOnInstance(target, "HmiOperation", Describe(result), name, JsonToPlain(op["value"]));
+                    var r = SetPropertyOnInstance(target, "HmiPath", targetPath, name, JsonToPlain(op["value"]));
+                    if (r.ValueType != null) result["valueType"] = r.ValueType;
+                    if (r.Meta?["warning"] is JsonNode warning) result["warning"] = warning.DeepClone();
                     return FormatOperationValue(r.Value);
                 }
 
                 case "getproperty":
                 {
                     var name = Str(op, "name") ?? throw new InvalidOperationException("'name' is required");
-                    return FormatOperationValue(GetPropertyPathValue(target, name));
+                    var v = WalkObjectPath(target, name.Split(new[] { '.' }, StringSplitOptions.RemoveEmptyEntries));
+                    // Runtime type, not the declared one: a MappingTableEntry.Value is declared object
+                    // and must be checked to really be a System.Drawing.Color, not a string.
+                    result["valueType"] = v?.GetType().FullName;
+                    return FormatOperationValue(v);
                 }
 
                 case "bind":
@@ -295,7 +304,7 @@ namespace TiaMcpServer.Siemens
                 {
                     var method = Str(op, "method") ?? throw new InvalidOperationException("'method' is required");
                     var allowWrite = op["allowWrite"] is JsonValue aw && aw.TryGetValue<bool>(out var w) && w;
-                    var r = InvokeOnInstance(target, "HmiOperation", Describe(result), method, op["args"]?.DeepClone() as JsonArray, allowWrite);
+                    var r = InvokeOnInstance(target, "HmiPath", targetPath, method, op["args"]?.DeepClone() as JsonArray, allowWrite);
                     if (r.Message != "OK") throw new InvalidOperationException(r.Message);
                     return FormatOperationValue(r.Value);
                 }
@@ -357,6 +366,32 @@ namespace TiaMcpServer.Siemens
                 target = WalkObjectPath(target, SplitObjectPath(sub)) ?? throw new InvalidOperationException($"sub path '{sub}' not found");
             }
             return target;
+        }
+
+        /// <summary>
+        /// HmiPath (objectKind=HmiPath) of an operation's target: {path} → "&lt;hmi&gt;/&lt;path&gt;",
+        /// {screen,item} → "&lt;hmi&gt;/Screens/&lt;screen&gt;/ScreenItems/&lt;item&gt;", plus "/&lt;sub&gt;".
+        /// A screen inside a screen group is reached by ApplyHmiOperations, but this path form
+        /// only resolves root screens (use path "ScreenGroups/&lt;g&gt;/Screens/&lt;s&gt;/..." for those).
+        /// </summary>
+        private static string TargetHmiPath(string hmiSoftwarePath, JsonObject op)
+        {
+            var parts = new List<string> { hmiSoftwarePath.Trim('/') };
+            var path = Str(op, "path");
+            if (!string.IsNullOrWhiteSpace(path))
+            {
+                parts.Add(path!.Trim('/'));
+            }
+            else
+            {
+                var screen = Str(op, "screen");
+                var item = Str(op, "item");
+                if (!string.IsNullOrWhiteSpace(screen)) parts.Add("Screens/" + screen);
+                if (!string.IsNullOrWhiteSpace(item)) parts.Add("ScreenItems/" + item);
+            }
+            var sub = Str(op, "sub");
+            if (!string.IsNullOrWhiteSpace(sub)) parts.Add(sub!.Trim('/'));
+            return string.Join("/", parts);
         }
 
         private static string Describe(JsonObject result)
