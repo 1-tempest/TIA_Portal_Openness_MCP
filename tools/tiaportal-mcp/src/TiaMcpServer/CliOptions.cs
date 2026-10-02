@@ -12,6 +12,7 @@
         public string? HttpPrefix { get; set; } // e.g. "http://127.0.0.1:8765/"
         public string? HttpApiKey { get; set; } // optional X-API-Key header value
         public int? HttpTimeoutSeconds { get; set; } // --http-timeout: max seconds a POST waits for its response (default 300)
+        public string? WorkDir { get; set; } // --work-dir: server work folder for file round trips (default %TEMP%\TiaMcpWork)
         public bool RunFlowLightTest { get; set; }
         public bool FixCurrentFlowBinding { get; set; }
         public bool ProbeS71200Device { get; set; }
@@ -756,6 +757,14 @@
                         if (i + 1 < args.Length)
                         {
                             options.HttpApiKey = args[i + 1];
+                            i++;
+                        }
+                        break;
+
+                    case "--work-dir":
+                        if (i + 1 < args.Length)
+                        {
+                            options.WorkDir = args[i + 1];
                             i++;
                         }
                         break;

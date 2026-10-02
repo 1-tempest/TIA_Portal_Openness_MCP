@@ -140,7 +140,7 @@ L1  Connect, Disconnect, AttachToOpenProject, OpenProject, CreateProject,
 ### HTTP (any client that speaks JSON-RPC)
 
 ```powershell
-TiaMcpServer.exe --transport http --http-prefix http://127.0.0.1:8765/ --http-api-key <secret> [--http-timeout 300]
+TiaMcpServer.exe --transport http --http-prefix http://127.0.0.1:8765/ --http-api-key <secret> [--http-timeout 300] [--work-dir C:\TiaMcpWork]
 ```
 
 Endpoints:
@@ -1021,6 +1021,27 @@ no entries crashes the HMI compile. SetProperty of ConditionType warns in that c
 Script dynamization (needs runtime scripts): `Invoke` `Create<ScriptDynamization>` with
 `args:["BackColor"]` on `…/Dynamizations`, then `SetProperty` `ScriptCode`, `Trigger.Type`=`Tags`,
 `Trigger.Tags`=`["State_Int"]` on `…/Dynamizations/BackColor`.
+
+### Text lists: export → edit → import (v2.8.2)
+
+V21 Unified exposes no text-list entries in Openness: `HmiSoftware.HmiTextLists` offers only
+`Find(name)`, `Export(DirectoryInfo, String filename)`, `Import(DirectoryInfo, String filename)`;
+an `HmiTextList` has only `Name` and `Delete()`. Content changes go through the export file.
+
+Files live in the **server work folder** (default `%TEMP%\TiaMcpWork`, `--work-dir <path>` or
+`TIA_MCP_WORK_DIR`). A RELATIVE DirectoryInfo/FileInfo argument resolves there; an absolute one is
+used as is; `Export*` creates the target folder.
+
+1. `DeleteWorkFile path="textlists"` (optional: start clean).
+2. `InvokeObject objectKind=HmiPath objectPath="HMI_RT_1/HmiTextLists" methodName=Export args=["textlists","TL_RamState"] allowWrite=true`.
+3. `ListWorkFiles subPath="textlists"`: see which file(s) TIA wrote (name and extension decided by TIA).
+4. `ReadWorkFile path="textlists/<file>"` → `encoding=base64` for .xlsx; page with `offset` until `eof`.
+5. Edit on the client, then `WriteWorkFile path="textlists/<file>" content=<base64> base64=true overwrite=true`
+   (big files: first chunk `overwrite=true`, further chunks `append=true`).
+6. `InvokeObject … methodName=Import args=["textlists","<file>"] allowWrite=true`, then compile the HMI.
+
+The same DirectoryInfo/FileInfo handling applies to the other V21 Unified Export/Import methods:
+graphic lists and system text lists, `HmiTags` (tag tables), script modules.
 
 ### Many HMI edits: `ApplyHmiOperations` (v2.8.0)
 

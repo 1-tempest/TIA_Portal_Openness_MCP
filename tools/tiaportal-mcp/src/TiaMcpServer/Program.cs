@@ -113,6 +113,7 @@ namespace TiaMcpServer
                 // Tool roster size. --profile wins over TIA_MCP_PROFILE; default is lite.
                 // Must be applied before the MCP host is built, since it decides tools/list.
                 ModelContextProtocol.McpServer.SetProfileOverride(options.Profile);
+                ModelContextProtocol.WorkFolder.SetRootOverride(options.WorkDir);
 
                 Engineering.LaunchWithUserInterface = options.PortalWithUserInterface;
                 LogDiag(options.PortalWithUserInterface

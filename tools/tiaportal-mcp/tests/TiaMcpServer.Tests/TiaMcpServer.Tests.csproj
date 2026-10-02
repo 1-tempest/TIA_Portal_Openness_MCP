@@ -43,6 +43,8 @@
     <!-- 名字查找（Find 优先 + 缓存索引）：退回逐项遍历不会报错，只会让一次发布慢几十分钟。 -->
     <Compile Include="..\..\src\TiaMcpServer\ModelContextProtocol\HmiNameLookup.cs" Link="HmiNameLookup.cs" />
     <Compile Include="..\..\src\TiaMcpServer\ModelContextProtocol\ToolTimings.cs" Link="ToolTimings.cs" />
+    <!-- 服务器工作目录：越界不会报错，只会让客户端读写博途机器上的任意文件。 -->
+    <Compile Include="..\..\src\TiaMcpServer\ModelContextProtocol\WorkFolder.cs" Link="WorkFolder.cs" />
     <!-- DescribeBlockLogic 的回读（issue #42）：错了不报错、不崩，只会让人看到不存在的逻辑。 -->
     <Compile Include="..\..\src\TiaMcpServer\ModelContextProtocol\SimaticMlText.cs" Link="SimaticMlText.cs" />
     <Compile Include="..\..\src\TiaMcpServer\ModelContextProtocol\LadTextRenderer.cs" Link="LadTextRenderer.cs" />

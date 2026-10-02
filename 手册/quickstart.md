@@ -45,7 +45,7 @@ When the server is running, **`tools/list`** (or your client’s tool picker) is
 ## 4. HTTP transport（advanced）
 
 ```powershell
-TiaMcpServer.exe --transport http --http-prefix http://127.0.0.1:8765/ --http-api-key <secret> [--http-timeout 300]
+TiaMcpServer.exe --transport http --http-prefix http://127.0.0.1:8765/ --http-api-key <secret> [--http-timeout 300] [--work-dir C:\TiaMcpWork]
 ```
 
 - **`GET /mcp/health`** — liveness only  

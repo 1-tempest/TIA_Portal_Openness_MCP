@@ -2088,6 +2088,11 @@ namespace TiaMcpServer.Siemens
                         converted[i] = oldValue == null ? av : CoerceReflectionValue(av, oldValue.GetType());
                         continue;
                     }
+                    if (pt == typeof(System.IO.DirectoryInfo) || pt == typeof(System.IO.FileInfo))
+                    {
+                        converted[i] = ToFileSystemInfo(av.ToString(), pt, methodName);
+                        continue;
+                    }
                     // 枚举（如 Entries.Create(BitDynamizationType)）、Color、数值等按参数类型转换。
                     converted[i] = pt == typeof(object) ? av : CoerceReflectionValue(av, pt);
                 }
@@ -2541,6 +2546,32 @@ namespace TiaMcpServer.Siemens
                 ? $"Type '{typeName}' not found in loaded Siemens.Engineering assemblies."
                 : $"Type '{typeName}' is ambiguous; use the full name: {string.Join(", ", candidates.Select(c => c.FullName))}.";
             return null;
+        }
+
+        /// <summary>
+        /// String → DirectoryInfo / FileInfo for Openness Export/Import (text lists, HMI tags, script
+        /// modules, …). A relative path lands in the server work folder (see WorkFolder), an absolute
+        /// one is used as is. For Export* the target directory is created when missing.
+        /// </summary>
+        private static System.IO.FileSystemInfo ToFileSystemInfo(string? text, Type type, string methodName)
+        {
+            if (string.IsNullOrWhiteSpace(text)) throw new ArgumentException($"{type.Name} argument is empty.");
+            var raw = text!.Trim();
+            var full = System.IO.Path.IsPathRooted(raw) ? System.IO.Path.GetFullPath(raw) : ModelContextProtocol.WorkFolder.Resolve(raw);
+            var isExport = methodName.StartsWith("Export", StringComparison.OrdinalIgnoreCase);
+
+            if (type == typeof(System.IO.DirectoryInfo))
+            {
+                if (isExport) System.IO.Directory.CreateDirectory(full);
+                return new System.IO.DirectoryInfo(full);
+            }
+
+            if (isExport)
+            {
+                var dir = System.IO.Path.GetDirectoryName(full);
+                if (!string.IsNullOrEmpty(dir)) System.IO.Directory.CreateDirectory(dir);
+            }
+            return new System.IO.FileInfo(full);
         }
 
         private static bool IsPathKind(string? kind)

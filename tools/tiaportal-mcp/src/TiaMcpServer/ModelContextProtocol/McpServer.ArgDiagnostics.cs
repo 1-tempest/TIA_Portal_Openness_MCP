@@ -139,6 +139,7 @@ namespace TiaMcpServer.ModelContextProtocol
         {
             "GetHmiOperationsJob", "GetToolTimings", "FindTools",
             "GetExport", "ListExports", "DeleteExport", "ClearExports",
+            "ListWorkFiles", "ReadWorkFile", "WriteWorkFile", "DeleteWorkFile",
         };
 
         private static bool IsGateExempt(string toolName, IReadOnlyDictionary<string, System.Text.Json.JsonElement>? args)

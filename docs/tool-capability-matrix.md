@@ -66,6 +66,15 @@
 | DeleteExport | [L1][Exports] Drop one export handle once you are done with it. Optional — handles expire on their own after 24 hours and the oldest are evicted automatically when the store fills up. |
 | ClearExports | [L1][Exports] Drop parked responses in bulk. NOTE: handles already expire on their own at 24h, so the default olderThanHours=24 almost always deletes nothing — pass olderThanHours=0 to actually free the store now. |
 
+### Files
+
+| Tool | Description |
+|---|---|
+| ListWorkFiles | [L1][Files] List files/folders in the server work folder (default %TEMP%\TiaMcpWork; --work-dir / TIA_MCP_WORK_DIR). Does not touch TIA. |
+| ReadWorkFile | [L1][Files] Read a work-folder file as text or base64 (e.g. .xlsx), paged by bytes. Does not touch TIA. |
+| WriteWorkFile | [L1][Files] Write a work-folder file (text or base64; overwrite/append guarded). Does not touch TIA. |
+| DeleteWorkFile | [L1][Files] Delete a file or folder inside the work folder. Does not touch TIA. |
+
 ### Hardware
 
 | Tool | Description |

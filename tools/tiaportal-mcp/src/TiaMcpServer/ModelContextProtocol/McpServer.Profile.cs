@@ -63,6 +63,8 @@ namespace TiaMcpServer.ModelContextProtocol
             "GetExport", "ListExports", "SaveExport", "DeleteExport", "ClearExports",
             // HMI 批量编辑与作业轮询：发布一块 400+ 项的画面要几千次单项调用，批量是唯一可用的路。
             "ApplyHmiOperations", "GetHmiOperationsJob", "GetToolTimings",
+            // 服务器工作目录：Openness 导出/导入只认服务器上的文件（文本列表只能这样改）。
+            "ListWorkFiles", "ReadWorkFile", "WriteWorkFile", "DeleteWorkFile",
         };
 
         public static IList<McpServerTool> GetLiteTools()

@@ -2,7 +2,7 @@
   "package": "TIA_MCP_Delivery_v2.4.0",
   "generatedAt": "2026-09-16T17:25:02.533852+08:00",
   "source": "live MCP tools/list of TiaMcpServer.exe",
-  "toolCount": 226,
+  "toolCount": 230,
   "note": "Full roster (--profile full). The default lite profile lists ~49 of these; the rest stay reachable via FindTools + CallTool. Runtime tools/list remains authoritative.",
   "tools": [
     {
@@ -678,6 +678,17 @@
         "dryRun"
       ],
       "description": "[L2][PLC-Software][Destructive] Preview or delete ONE PLC user data type (UDT / PlcType) by its exact path. Defaults to dryRun=true. Deleting a UDT breaks every DB and block interface declared with it, so the preview reports its cross references (GetCrossReferences works at type level) before you commit - review them first. Regex and wildcards are rejected. Export the type first with ExportType, and CompileSoftware afterwards."
+    },
+    {
+      "name": "DeleteWorkFile",
+      "layer": "L1",
+      "domain": "Files",
+      "method": "DeleteWorkFile",
+      "returnType": "",
+      "parameters": [
+        "path"
+      ],
+      "description": "[L1][Files] Delete a file or folder (recursively) inside the server work folder, e.g. to clear an old export before re-exporting. Does not touch TIA."
     },
     {
       "name": "DescribeBlockLogic",
@@ -2206,6 +2217,19 @@
       "description": "[L2][HMI-Unified]List loaded WinCC Unified HMI API types/enums by name filter, useful for discovering event and dynamization types."
     },
     {
+      "name": "ListWorkFiles",
+      "layer": "L1",
+      "domain": "Files",
+      "method": "ListWorkFiles",
+      "returnType": "",
+      "parameters": [
+        "subPath",
+        "pattern",
+        "recursive"
+      ],
+      "description": "[L1][Files] List files/folders in the server work folder (default %TEMP%\\TiaMcpWork; --work-dir / TIA_MCP_WORK_DIR). Openness Export targets given as RELATIVE paths land here. Does not touch TIA."
+    },
+    {
       "name": "MonitorWatchTableLiveS7",
       "layer": "L2",
       "domain": "Online-Monitoring",
@@ -2434,6 +2458,20 @@
         "maxEntries"
       ],
       "description": "[L2][Online-Monitoring] Read current/monitor value properties from an existing PLC watch table only. It does not create/modify watch tables, write PLC values, go offline, or use force operations."
+    },
+    {
+      "name": "ReadWorkFile",
+      "layer": "L1",
+      "domain": "Files",
+      "method": "ReadWorkFile",
+      "returnType": "",
+      "parameters": [
+        "path",
+        "offset",
+        "length",
+        "encoding"
+      ],
+      "description": "[L1][Files] Read a file from the server work folder. encoding auto|text|base64 (auto: UTF-8 text, else base64, e.g. .xlsx). Page with offset/length (bytes) until eof=true. Does not touch TIA."
     },
     {
       "name": "RebuildReleaseHandoffArtifacts",
@@ -2872,6 +2910,21 @@
         "outputPath"
       ],
       "description": "[L1][PLC-Software][Offline] Write SCL source text to a local .scl external-source file (UTF-8 WITH BOM, so Chinese comments are not imported as mojibake/乱码). This tool does NOT connect to TIA Portal and does NOT import anything — it only writes the file to disk and returns the path plus manual-import instructions. Use it as the robust fallback when XML block import is rejected (e.g. a TIA V20 portal rejecting V21 SimaticML tokens: 'Cannot create SW.Blocks.CompileUnit... token not supported'): the user imports the .scl manually in TIA via project tree → 'External source files' → 'Add new external file', then right-clicks the source → 'Generate blocks from source'. The sclContent must be a complete source, e.g. FUNCTION_BLOCK \"Name\" ... END_FUNCTION_BLOCK."
+    },
+    {
+      "name": "WriteWorkFile",
+      "layer": "L1",
+      "domain": "Files",
+      "method": "WriteWorkFile",
+      "returnType": "",
+      "parameters": [
+        "path",
+        "content",
+        "base64",
+        "overwrite",
+        "append"
+      ],
+      "description": "[L1][Files] Write a file into the server work folder (text as UTF-8, or base64=true for binary). Refuses to replace an existing file unless overwrite=true; append=true for chunked upload. Then Import it via InvokeObject. Does not touch TIA."
     }
   ]
 }

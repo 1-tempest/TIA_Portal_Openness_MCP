@@ -1,5 +1,25 @@
 ﻿# Change Log
 
+## [2.8.2] - 2026-10-02 - Openness 导出/导入能传目录参数；服务器工作目录的文件往返
+
+### 修复
+
+- **`InvokeObject` / `ApplyHmiOperations` 的 `Invoke` 不能调 Openness 的 Export/Import**：
+  参数是 `System.IO.DirectoryInfo` / `FileInfo`，字符串原样传进去，报
+  "Object of type 'System.String' cannot be converted to type 'System.IO.DirectoryInfo'"。
+  现在字符串转成 DirectoryInfo/FileInfo：相对路径落在服务器工作目录，绝对路径原样使用；
+  方法名以 Export 开头时目标目录不存在就建。V21 Unified 里用到这两个类型的有文本列表、
+  图形列表、系统文本列表、HMI 变量（HmiTags）、脚本模块。
+
+### 新增
+
+- **服务器工作目录与四个文件工具** `ListWorkFiles` / `ReadWorkFile` / `WriteWorkFile` / `DeleteWorkFile`：
+  客户端看不到 TIA 所在机器的磁盘，导出的文件（如文本列表的 .xlsx）要靠这几个工具取回、改完再送回去导入。
+  根目录 `--work-dir` > `TIA_MCP_WORK_DIR` > `%TEMP%\TiaMcpWork`；所有路径限定在其内（`..`、外部绝对路径、
+  同前缀的兄弟目录一律拒绝）。读：`auto` 下 UTF-8 文本原样返回、二进制给 base64，按字节分页；
+  写：文本或 base64，默认不覆盖已有文件，`append=true` 支持分块上传。都不碰 TIA，作业运行中也可用。
+  （`ExportStore`/`SaveExport` 是内存里的大响应分页，不管理文件，没有复用。）
+
 ## [2.8.1] - 2026-10-02 - 新建对象回路径、读值回运行期类型、Text 映射表告警
 
 ### 修复
