@@ -1,5 +1,26 @@
 ﻿# Change Log
 
+## [2.9.0] - 2026-10-02 - 把 HMI 运行画面看成 PNG；多语言文本按 TIA 格式写
+
+### 新增
+
+- **HMI 运行画面截图（浏览器路线，首选）**：`HmiBrowserStart` / `HmiBrowserNavigate` / `HmiBrowserClick` /
+  `HmiBrowserWait` / `HmiBrowserScreenshot` / `HmiBrowserStop`。用 Chrome DevTools 协议驱动无头 Microsoft Edge
+  （原生 WebSocket JSON，无新增 NuGet），接受自签名证书、临时配置目录，默认打开 `https://localhost/WebRH`，
+  遇到登录页且给了用户名/密码就登录；运行时没起来时报「runtime not running」。
+- **桌面/窗口截图（兜底）**：`CaptureDesktop`、`CaptureWindow`（按标题正则，PrintWindow，失败退回 BitBlt），
+  可裁剪；匹配不到时列出可见窗口标题；会话 0 的服务拿到全黑图时 `meta.looksBlank=true`。
+- **截图同时以 MCP image 内容块返回**（JSON 文本块在前，PNG 在后），文件存在工作目录，`ReadWorkFile`
+  base64 照常可读；`CallTool` 转发时只回文本块。这些工具都不碰 TIA 工程，作业运行中也可用。
+- **仿真启动/停止**：V21 公共 Openness 里没有启动 Unified 运行仿真的 API（DLL 中没有 HMI 的
+  Simulation/StartRuntime 成员），因此不提供 StartHmiSimulation；仿真在 TIA 里手动启动。
+
+### 修复
+
+- **`MultilingualText` 写纯字符串在 TIA 上失败**（2.8.3）："The argument 'text' … has an invalid format"。
+  `MultilingualTextItem.Text` 只接受 `<body><p>…</p></body>`。现在纯字符串自动包成这个格式（XML 转义，
+  每行一个 `<p>`），已是 `<body>…</body>` 的原样写入；`EventText` 快捷写法与 `Items.<culture>.Text` 都适用。
+
 ## [2.8.4] - 2026-10-02 - 路径里能走 GetService；对象参数按路径引用；SecureString 参数
 
 ### 新增

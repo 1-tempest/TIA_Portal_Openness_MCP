@@ -1033,6 +1033,30 @@ V21 types (from the DLLs): Unified alarms derive from `AlarmBase` with `EventTex
   → writes the item of the project's editing language (else reference language), returns `{culture: text}` and `meta.culture`.
 - Explicit culture: `propertyPath="EventText.Items.de-DE.Text"` (items are addressed by culture name),
   or HmiPath `…/Probe_Alarm/EventText/Items/en-US` + `Text`.
+- Format (verified V21): `MultilingualTextItem.Text` only accepts `<body><p>…</p></body>`. Since 2.9.0 plain
+  strings are wrapped automatically (XML-escaped, one `<p>` per line); values already in `<body>…</body>`
+  pass unchanged. Reads return the stored `<body>` form.
+
+### Viewing the HMI runtime as PNGs (v2.9.0)
+
+Nothing here writes to the TIA project.
+
+1. **Start the simulation by hand in TIA** (HMI_RT_1 → Start simulation). V21 public Openness has no API to
+   start or stop the Unified runtime simulation; the DLLs contain no Simulation/StartRuntime member for HMI.
+2. `HmiBrowserStart url="https://localhost/WebRH" width=1280 height=800 user=… password=…`
+   (headless Edge via DevTools, self-signed certificate accepted, temporary profile). `meta.login`:
+   `none` (no login page) | `required` (pass user/password) | `ok` | `failed`. Connection refused →
+   "runtime not running". The default URL `https://<host>/WebRH` is the usual Unified web root; if the
+   simulation serves elsewhere, pass `url`.
+3. Navigate: `HmiBrowserClick x=… y=… waitMs=800` (viewport pixels = screen pixels at 1280×800), or
+   `HmiBrowserNavigate url=…`; `HmiBrowserWait ms=…` for values to settle.
+4. `HmiBrowserScreenshot path="captures/heaters.png"` (optional clip): PNG in the work folder, returned as an
+   image content block after the JSON text block. `ReadWorkFile path=… encoding=base64` also works.
+5. `HmiBrowserStop`.
+
+Fallback without the browser: `CaptureWindow titleRegex="<simulation window title>"` or `CaptureDesktop`
+(optional crop). They need the server in an interactive desktop session; a service in session 0 gets black
+images (`meta.looksBlank=true`). A failed CaptureWindow lists the visible window titles.
 - Reading a MultilingualText (GetObjectProperty / batch GetProperty) returns `{ "en-US": "...", ... }`.
 
 **Caution: `GetAttributeInfos` on Unified alarm objects.** On V21 one session ran

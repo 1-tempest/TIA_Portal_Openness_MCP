@@ -66,6 +66,9 @@ namespace TiaMcpServer.Tests
             Console.WriteLine("== 工作目录：路径不许越界，文本/二进制往返无损 ==");
             WorkFolderTests.Run(Check);
 
+            Console.WriteLine("== MultilingualText: plain strings wrapped in TIA <body><p> format ==");
+            MultilingualTextFormatTests.Run(Check);
+
             Console.WriteLine("== DescribeBlockLogic 的 SCL 回读逐行还原：下标 / 调用 / 常量 / 引号（issue #42）==");
             SymbolQuotingReadbackTests.Run(Check);
 

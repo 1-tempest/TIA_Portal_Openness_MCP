@@ -278,6 +278,18 @@ namespace TiaMcpServer.ModelContextProtocol
                 }
 
                 object? result = method!.Invoke(null, call);
+                // Async tools: wait for the Task and take its Result.
+                if (result is System.Threading.Tasks.Task task)
+                {
+                    task.GetAwaiter().GetResult();
+                    result = task.GetType().GetProperty("Result")?.GetValue(task);
+                }
+                // Image tools return CallToolResult: hand through the JSON text block (the PNG stays in the work folder).
+                if (result is global::ModelContextProtocol.Protocol.CallToolResult ctr)
+                {
+                    var firstText = ctr.Content?.OfType<global::ModelContextProtocol.Protocol.TextContentBlock>().FirstOrDefault()?.Text;
+                    return new ResponseMessage { Message = firstText ?? "", Meta = BridgeMeta(ctr.IsError != true) };
+                }
                 // Tools return their own strongly-typed response objects; hand that JSON through
                 // unchanged so the model sees exactly what a direct call would have produced.
                 string payload = result == null

@@ -1,7 +1,7 @@
 ﻿{
   "schemaVersion": "2026-05-25",
-  "bundleVersion": "2.8.4",
-  "packageName": "TIA_MCP_Delivery_v2.8.4_20261002",
+  "bundleVersion": "2.9.0",
+  "packageName": "TIA_MCP_Delivery_v2.9.0_20261002",
   "packageType": "tia-portal-mcp-complete-offline-delivery-bundle",
   "generatedAt": "2026-05-31T20:30:00+08:00",
   "refreshedAt": "2026-10-02T12:00:00+08:00",
@@ -84,11 +84,11 @@
     }
   },
   "capabilities": {
-    "mcpToolCount": 230,
+    "mcpToolCount": 238,
     "mcpToolLayers": {
       "L0": 10,
       "L1": 42,
-      "L2": 167
+      "L2": 175
     },
     "newToolsThisRelease": [
       "SetObjectProperty (v2.8.0)",
@@ -98,7 +98,15 @@
       "ListWorkFiles (v2.8.2)",
       "ReadWorkFile (v2.8.2)",
       "WriteWorkFile (v2.8.2)",
-      "DeleteWorkFile (v2.8.2)"
+      "DeleteWorkFile (v2.8.2)",
+      "CaptureDesktop (v2.9.0)",
+      "CaptureWindow (v2.9.0)",
+      "HmiBrowserStart (v2.9.0)",
+      "HmiBrowserNavigate (v2.9.0)",
+      "HmiBrowserClick (v2.9.0)",
+      "HmiBrowserWait (v2.9.0)",
+      "HmiBrowserScreenshot (v2.9.0)",
+      "HmiBrowserStop (v2.9.0)"
     ],
     "removedToolsThisRelease": [],
     "hmiTemplateJsonCount": 8,

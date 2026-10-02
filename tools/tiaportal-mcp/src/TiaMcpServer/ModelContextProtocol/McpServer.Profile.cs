@@ -65,6 +65,9 @@ namespace TiaMcpServer.ModelContextProtocol
             "ApplyHmiOperations", "GetHmiOperationsJob", "GetToolTimings",
             // 服务器工作目录：Openness 导出/导入只认服务器上的文件（文本列表只能这样改）。
             "ListWorkFiles", "ReadWorkFile", "WriteWorkFile", "DeleteWorkFile",
+            // HMI view: look at the Unified runtime (simulation) as PNGs without touching the project.
+            "CaptureDesktop", "CaptureWindow", "HmiBrowserStart", "HmiBrowserNavigate", "HmiBrowserClick",
+            "HmiBrowserWait", "HmiBrowserScreenshot", "HmiBrowserStop",
         };
 
         public static IList<McpServerTool> GetLiteTools()

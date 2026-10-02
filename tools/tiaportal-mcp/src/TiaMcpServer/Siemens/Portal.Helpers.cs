@@ -2323,6 +2323,13 @@ namespace TiaMcpServer.Siemens
                 };
             }
 
+            // MultilingualTextItem.Text (path "<Prop>.Items.<culture>.Text") only accepts TIA's
+            // "<body><p>…</p></body>" format; wrap plain strings the same way as the shortcut above.
+            if (p != null && p.Name == "Text" && owner.GetType().Name == "MultilingualTextItem" && value is string plain)
+            {
+                value = ModelContextProtocol.MultilingualTextFormat.ToTiaXml(plain);
+            }
+
             if (p == null || !p.CanWrite || p.SetMethod == null || !p.SetMethod.IsPublic)
             {
                 throw new PortalException(PortalErrorCode.InvalidParams,
@@ -2441,7 +2448,7 @@ namespace TiaMcpServer.Siemens
                     "Use the path <Prop>.Items.<culture>.Text.");
             }
 
-            GetPropertyRobust(target, "Text")!.SetValue(target, text);
+            GetPropertyRobust(target, "Text")!.SetValue(target, ModelContextProtocol.MultilingualTextFormat.ToTiaXml(text));
             return CultureOf(target) ?? "";
         }
 

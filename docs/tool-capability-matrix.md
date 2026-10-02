@@ -211,6 +211,19 @@
 | ImportHmiScreensFromDirectory | [L2][HMI]Batch import HMI screen .xml files from a directory (best-effort) |
 | ImportHmiTagTablesFromDirectory | [L2][HMI]Batch import HMI tag table .xml files from a directory (best-effort) |
 
+### HMI-View
+
+| Tool | Description |
+|---|---|
+| HmiBrowserStart | [L2][HMI-View] Headless Edge (DevTools) on the WinCC Unified web runtime (default https://localhost/WebRH), optional login. |
+| HmiBrowserNavigate | [L2][HMI-View] Open another URL in the HMI browser. |
+| HmiBrowserClick | [L2][HMI-View] Click at viewport pixel (x, y), then wait. |
+| HmiBrowserWait | [L2][HMI-View] Wait ms milliseconds. |
+| HmiBrowserScreenshot | [L2][HMI-View] Viewport PNG (optional clip) to the work folder + image content. |
+| HmiBrowserStop | [L2][HMI-View] Close the HMI browser. |
+| CaptureWindow | [L2][HMI-View] PNG of a window matched by title regex (fallback). |
+| CaptureDesktop | [L2][HMI-View] PNG of the desktop (fallback). |
+
 ### HMI-Classic
 
 | Tool | Description |
