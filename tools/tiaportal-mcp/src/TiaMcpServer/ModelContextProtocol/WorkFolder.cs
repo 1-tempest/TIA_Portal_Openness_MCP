@@ -114,8 +114,33 @@ namespace TiaMcpServer.ModelContextProtocol
 
             var enc = (encoding ?? "auto").Trim().ToLowerInvariant();
             if (enc == "auto") enc = LooksLikeText(buffer) ? "text" : "base64";
+
+            // A text page must not end inside a UTF-8 sequence, or both pages decode a broken char.
+            if (enc == "text" && offset + count < size)
+            {
+                var cut = Utf8SafeLength(buffer);
+                if (cut > 0 && cut < count)
+                {
+                    Array.Resize(ref buffer, cut);
+                    count = cut;
+                }
+            }
+
             var content = enc == "base64" ? Convert.ToBase64String(buffer) : DecodeUtf8(buffer, offset == 0);
             return (content, enc, size, offset, count, offset + count >= size);
+        }
+
+        /// <summary>Length without a trailing incomplete UTF-8 sequence.</summary>
+        internal static int Utf8SafeLength(byte[] b)
+        {
+            var n = b.Length;
+            var i = n - 1;
+            var continuation = 0;
+            while (i >= 0 && continuation < 3 && (b[i] & 0xC0) == 0x80) { i--; continuation++; }
+            if (i < 0) return n;
+            var lead = b[i];
+            var need = (lead & 0x80) == 0 ? 1 : (lead & 0xE0) == 0xC0 ? 2 : (lead & 0xF0) == 0xE0 ? 3 : (lead & 0xF8) == 0xF0 ? 4 : 1;
+            return continuation + 1 >= need ? n : i;
         }
 
         public static long Write(string path, string content, bool base64, bool overwrite, bool append)

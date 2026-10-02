@@ -32,6 +32,21 @@ namespace TiaMcpServer.Tests
                 var t = WorkFolder.Read("textlists/TL.txt", 0, 0, "auto");
                 check(t.Encoding == "text" && t.Content == "Zustand Ä 状态" && t.Eof, "text file reads back as text (got " + t.Encoding + ")");
 
+                // Text pages never end inside a UTF-8 sequence (ä = 2 bytes, 状 = 3 bytes).
+                var mixed = string.Concat(Enumerable.Repeat("aä状", 50));
+                WorkFolder.Write("textlists/mixed.txt", mixed, base64: false, overwrite: false, append: false);
+                var sb = new System.Text.StringBuilder();
+                long off = 0;
+                var pages = 0;
+                while (pages++ < 200)
+                {
+                    var page = WorkFolder.Read("textlists/mixed.txt", off, 7, "text");
+                    sb.Append(page.Content);
+                    off = page.Offset + page.Returned;
+                    if (page.Eof || page.Returned == 0) break;
+                }
+                check(sb.ToString() == mixed, "paged text reads reassemble multi-byte characters exactly");
+
                 // Overwrite guard
                 check(Throws(() => WorkFolder.Write("textlists/TL.txt", "x", false, false, false)), "existing file is not replaced without overwrite");
                 WorkFolder.Write("textlists/TL.txt", "new", false, overwrite: true, append: false);

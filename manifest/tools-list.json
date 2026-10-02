@@ -2583,7 +2583,7 @@
         "length",
         "encoding"
       ],
-      "description": "[L1][Files] Read a file from the server work folder. encoding auto|text|base64 (auto: UTF-8 text, else base64, e.g. .xlsx). Page with offset/length (bytes) until eof=true. Does not touch TIA."
+      "description": "[L1][Files] Read a file from the server work folder. encoding auto|text|base64 (auto: UTF-8 text, else base64, e.g. .xlsx). Pages always fit the response limit (TIA_MCP_MAX_RESPONSE_CHARS, default 20000 chars: max ~14 KB base64, ~19 KB ASCII text per page); a larger length is reduced (meta.clamped). Page with nextOffset until eof=true. Does not touch TIA."
     },
     {
       "name": "RebuildReleaseHandoffArtifacts",

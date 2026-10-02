@@ -47,31 +47,52 @@ namespace TiaMcpServer.ModelContextProtocol
 
         [McpServerTool(Name = "ReadWorkFile"), Description(
             "[L1][Files] Read a file from the server work folder. encoding auto|text|base64 (auto: UTF-8 text, else base64, e.g. .xlsx). " +
-            "Large files: page with offset/length (bytes) until eof=true; concatenate base64 pages only after decoding each. Does not touch TIA.")]
+            "Pages always fit the response size limit (TIA_MCP_MAX_RESPONSE_CHARS, default 20000 chars): with the default limit a page is at most " +
+            "~14 KB for base64 and up to ~19 KB for ASCII text (less for non-ASCII text); a larger 'length' is reduced (meta.clamped=true). " +
+            "Page with nextOffset until eof=true; decode each base64 page before concatenating the bytes. Does not touch TIA.")]
         public static ResponseMessage ReadWorkFile(
             [Description("File path relative to the work folder")] string path,
-            [Description("Byte offset to start at")] long offset = 0,
-            [Description("Max bytes to return (0 = up to 1 MB)")] int length = 0,
+            [Description("Byte offset to start at (use the previous page's nextOffset)")] long offset = 0,
+            [Description("Max bytes to return (0 = the largest page that fits the response limit)")] int length = 0,
             [Description("auto | text | base64")] string encoding = "auto")
         {
             try
             {
-                var r = WorkFolder.Read(path, offset, length, encoding);
-                return new ResponseMessage
+                // A page larger than the response limit would be parked by the response guard
+                // (meta.truncated + exportId instead of content). Shrink the page until it fits.
+                var limit = ResolvedMaxResponseChars();
+                var budget = limit > 0 ? limit - 300 : int.MaxValue; // headroom for the protocol wrapper
+                var want = length > 0 ? length : (limit > 0 ? budget : 1_000_000);
+                var clamped = false;
+
+                for (int attempt = 0; ; attempt++)
                 {
-                    Message = $"{r.Returned} of {r.Size} bytes from offset {r.Offset} ({r.Encoding}){(r.Eof ? ", eof" : "")}.",
-                    Meta = new JsonObject
+                    var r = WorkFolder.Read(path, offset, want, encoding);
+                    var response = new ResponseMessage
                     {
-                        ["path"] = path,
-                        ["encoding"] = r.Encoding,
-                        ["size"] = r.Size,
-                        ["offset"] = r.Offset,
-                        ["returned"] = r.Returned,
-                        ["nextOffset"] = r.Eof ? null : r.Offset + r.Returned,
-                        ["eof"] = r.Eof,
-                        ["content"] = r.Content
-                    }
-                };
+                        Message = $"{r.Returned} of {r.Size} bytes from offset {r.Offset} ({r.Encoding}){(r.Eof ? ", eof" : "")}.",
+                        Meta = new JsonObject
+                        {
+                            ["path"] = path,
+                            ["encoding"] = r.Encoding,
+                            ["size"] = r.Size,
+                            ["offset"] = r.Offset,
+                            ["returned"] = r.Returned,
+                            ["nextOffset"] = r.Eof ? null : r.Offset + r.Returned,
+                            ["eof"] = r.Eof,
+                            ["clamped"] = clamped,
+                            ["responseLimitChars"] = limit,
+                            ["content"] = r.Content
+                        }
+                    };
+
+                    // Default serializer escapes non-ASCII, so this measure is on the safe side.
+                    var measured = System.Text.Json.JsonSerializer.Serialize(response).Length;
+                    if (limit <= 0 || measured <= budget || r.Returned <= 64 || attempt >= 8) return response;
+
+                    clamped = true;
+                    want = Math.Max(64, (int)(r.Returned * (double)budget / measured * 0.95));
+                }
             }
             catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is ArgumentException)
             {

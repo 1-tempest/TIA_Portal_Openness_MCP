@@ -1104,7 +1104,8 @@ used as is; `Export*` creates the target folder.
 1. `DeleteWorkFile path="textlists"` (optional: start clean).
 2. `InvokeObject objectKind=HmiPath objectPath="HMI_RT_1/HmiTextLists" methodName=Export args=["textlists","TL_RamState"] allowWrite=true`.
 3. `ListWorkFiles subPath="textlists"`: see which file(s) TIA wrote (name and extension decided by TIA).
-4. `ReadWorkFile path="textlists/<file>"` → `encoding=base64` for .xlsx; page with `offset` until `eof`.
+4. `ReadWorkFile path="textlists/<file>"` → `encoding=base64` for .xlsx; page with `offset=<nextOffset>` until `eof`.
+   Each page fits the response limit (default 20000 chars ≈ 14 KB base64 per page); decode each page, then join the bytes.
 5. Edit on the client, then `WriteWorkFile path="textlists/<file>" content=<base64> base64=true overwrite=true`
    (big files: first chunk `overwrite=true`, further chunks `append=true`).
 6. `InvokeObject … methodName=Import args=["textlists","<file>"] allowWrite=true`, then compile the HMI.

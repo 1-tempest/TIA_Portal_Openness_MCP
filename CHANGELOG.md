@@ -1,5 +1,15 @@
 ﻿# Change Log
 
+## [2.9.1] - 2026-10-02 - ReadWorkFile 的每一页都装得进响应上限
+
+### 修复
+
+- **`ReadWorkFile` 的 base64 页超过约 10–20 KB 就被响应上限截走**（meta 里只剩 truncated/exportId，没有 content）。
+  原来默认页长 1 MB，远超 `TIA_MCP_MAX_RESPONSE_CHARS`（默认 20000 字符）。现在默认页取「装得下的最大页」，
+  显式给的 `length` 太大时自动缩小（`meta.clamped=true`），按实际序列化后的 JSON 长度量；默认上限下每页最多
+  约 14 KB（base64）或约 19 KB（ASCII 文本）。`meta.responseLimitChars` 给出当前上限。
+- 文本分页不再把多字节 UTF-8 字符切在两页之间（原来两页各解出一个坏字符）。
+
 ## [2.9.0] - 2026-10-02 - 把 HMI 运行画面看成 PNG；多语言文本按 TIA 格式写
 
 ### 新增
