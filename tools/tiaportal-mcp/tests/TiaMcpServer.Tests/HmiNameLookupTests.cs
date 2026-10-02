@@ -62,6 +62,15 @@ namespace TiaMcpServer.Tests
                 "second lookup of a grouped screen comes from the cache");
             check(HmiNameLookup.FindScreen(software, "Nope") == null, "missing screen returns null");
 
+            // MultilingualTextItems have no Name: address them by culture ("EventText/Items/en-US").
+            var mlItems = new System.Collections.ArrayList
+            {
+                new FakeTextItem("de-DE", "Störung"),
+                new FakeTextItem("en-US", "Fault")
+            };
+            check(HmiNameLookup.Find(mlItems, "en-US") is FakeTextItem en && en.Text == "Fault", "multilingual item found by culture name");
+            check(HmiNameLookup.Find(mlItems, "fr-FR") == null, "missing culture returns null");
+
             // Contract: never throws.
             check(HmiNameLookup.Find(null, "x") == null && HmiNameLookup.Find(withFind, "") == null, "null/empty inputs return null");
         }
@@ -102,6 +111,19 @@ namespace TiaMcpServer.Tests
         {
             public FakeCompositionWithFind(IEnumerable<FakeItem> items) : base(items, true) { }
             public FakeItem? Find(string name) => FindImpl(name);
+        }
+
+        internal sealed class FakeLanguage
+        {
+            public FakeLanguage(string culture) { Culture = new System.Globalization.CultureInfo(culture); }
+            public System.Globalization.CultureInfo Culture { get; }
+        }
+
+        internal sealed class FakeTextItem
+        {
+            public FakeTextItem(string culture, string text) { Language = new FakeLanguage(culture); Text = text; }
+            public FakeLanguage Language { get; }
+            public string Text { get; set; }
         }
 
         internal sealed class FakeScreen

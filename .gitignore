@@ -19,3 +19,7 @@ bin-build/
 
 # python 缓存
 __pycache__/
+
+# process core dumps
+core
+core.[0-9]*

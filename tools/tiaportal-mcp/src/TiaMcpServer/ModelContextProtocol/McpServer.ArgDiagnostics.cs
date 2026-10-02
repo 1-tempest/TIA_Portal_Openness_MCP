@@ -120,18 +120,76 @@ namespace TiaMcpServer.ModelContextProtocol
 
             var sw = System.Diagnostics.Stopwatch.StartNew();
             var isError = true;
+            System.Text.Json.Nodes.JsonObject? recovery = null;
             try
             {
-                var result = await _inner.InvokeAsync(request, cancellationToken).ConfigureAwait(false);
+                // TIA 进程挂了就先恢复（重连 + 重开上次的工程），再跑这次调用；
+                // 恢复经过写进这次响应的 meta.recovery。Connect/Disconnect 是用户主动的，不插手。
+                if (gated && !NoRecovery.Contains(name))
+                {
+                    try { recovery = McpServer.Portal.EnsureAliveOrRecover(); }
+                    catch (Exception rex) { McpServer.Logger?.LogWarning(rex, "TIA crash recovery failed"); }
+                }
+
+                CallToolResult result;
+                try
+                {
+                    result = await _inner.InvokeAsync(request, cancellationToken).ConfigureAwait(false);
+                }
+                catch (global::ModelContextProtocol.McpException mex) when (recovery != null)
+                {
+                    throw new global::ModelContextProtocol.McpException(mex.Message + " [TIA crashed before this call and was recovered: " + recovery.ToJsonString() + "]", mex, mex.ErrorCode);
+                }
                 isError = result?.IsError == true;
+                if (recovery != null && result != null) AttachRecovery(result, recovery);
                 return result!;
             }
             finally
             {
-                if (gated) TiaMcpServer.Siemens.Portal.OpennessGate.Release();
+                if (gated)
+                {
+                    try { McpServer.Portal.NoteSessionState(); } catch { }
+                    TiaMcpServer.Siemens.Portal.OpennessGate.Release();
+                }
                 ToolTimings.Record(name, sw.ElapsedMilliseconds, isError);
                 McpServer.Logger?.LogInformation($"tool {name}: {sw.ElapsedMilliseconds} ms{(isError ? " (error)" : "")}");
             }
+        }
+
+        private static readonly HashSet<string> NoRecovery = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "Connect", "ConnectIsolated", "Disconnect",
+        };
+
+        /// <summary>
+        /// Puts the recovery report into the response's meta ({"message","meta"} envelope); if the
+        /// text is not that envelope, appends it as an extra text block instead.
+        /// </summary>
+        private static void AttachRecovery(CallToolResult result, System.Text.Json.Nodes.JsonObject recovery)
+        {
+            if (result.Content != null && result.Content.Count > 0 && result.Content[0] is TextContentBlock text)
+            {
+                try
+                {
+                    if (System.Text.Json.Nodes.JsonNode.Parse(text.Text ?? "") is System.Text.Json.Nodes.JsonObject obj)
+                    {
+                        if (obj["meta"] is not System.Text.Json.Nodes.JsonObject meta)
+                        {
+                            meta = new System.Text.Json.Nodes.JsonObject();
+                            obj["meta"] = meta;
+                        }
+                        meta["recovery"] = recovery.DeepClone();
+                        text.Text = obj.ToJsonString();
+                        return;
+                    }
+                }
+                catch
+                {
+                    // not JSON: fall through
+                }
+            }
+            result.Content ??= new List<ContentBlock>();
+            result.Content.Add(new TextContentBlock { Text = "TIA recovery: " + recovery.ToJsonString() });
         }
 
         /// <summary>不碰 TIA 的工具，作业运行期间也必须答得上来。</summary>

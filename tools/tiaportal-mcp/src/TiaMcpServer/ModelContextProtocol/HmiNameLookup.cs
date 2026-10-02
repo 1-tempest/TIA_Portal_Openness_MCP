@@ -196,7 +196,11 @@ namespace TiaMcpServer.ModelContextProtocol
             try
             {
                 // Dynamizations have no Name; they are addressed by the property they drive.
-                return (GetProperty(item, "Name") ?? GetProperty(item, "PropertyName"))?.ToString();
+                // MultilingualTextItems have neither; they are addressed by culture (e.g. "en-US").
+                var n = (GetProperty(item, "Name") ?? GetProperty(item, "PropertyName"))?.ToString();
+                if (n != null) return n;
+                var language = GetProperty(item, "Language");
+                return language == null ? null : (GetProperty(language, "Culture") as System.Globalization.CultureInfo)?.Name;
             }
             catch
             {

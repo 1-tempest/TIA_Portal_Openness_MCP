@@ -1903,7 +1903,11 @@ namespace TiaMcpServer.Siemens
             var vt = v?.GetType();
 
             object? outValue = v;
-            if (v is IEnumerable enumerable && v is not string)
+            if (v != null && v.GetType().Name == "MultilingualText")
+            {
+                outValue = MultilingualToDict(v);
+            }
+            else if (v is IEnumerable enumerable && v is not string)
             {
                 var items = new List<string>();
                 foreach (var it in enumerable)
@@ -2269,6 +2273,33 @@ namespace TiaMcpServer.Siemens
             }
 
             var p = GetPropertyRobust(owner, propName);
+
+            // MultilingualText (alarm EventText/InfoText, ToolTipText, …) is a read-only part; a plain
+            // string writes the item of the project's editing language. Other cultures: path
+            // "<Prop>.Items.<culture>.Text", e.g. EventText.Items.de-DE.Text.
+            if (p != null && p.PropertyType.Name == "MultilingualText" && (value is string || value == null))
+            {
+                var ml = p.GetValue(owner) ?? throw new PortalException(PortalErrorCode.NotFound, $"{propName} is null on {owner.GetType().FullName}.");
+                string culture;
+                try
+                {
+                    culture = SetMultilingualTextFromString(ml, value as string ?? "");
+                }
+                catch (TargetInvocationException tie)
+                {
+                    throw new PortalException(PortalErrorCode.OpennessError, $"Setting {propertyPath} failed: {(tie.InnerException ?? tie).Message}", null, tie.InnerException ?? tie);
+                }
+                return new ModelContextProtocol.ResponseObjectValue
+                {
+                    Message = "OK",
+                    ObjectKind = objectKind,
+                    ObjectPath = $"{objectPath}.{propertyPath}",
+                    ValueType = p.PropertyType.FullName,
+                    Value = MultilingualToDict(ml),
+                    Meta = new JsonObject { ["culture"] = culture }
+                };
+            }
+
             if (p == null || !p.CanWrite || p.SetMethod == null || !p.SetMethod.IsPublic)
             {
                 throw new PortalException(PortalErrorCode.InvalidParams,
@@ -2361,9 +2392,82 @@ namespace TiaMcpServer.Siemens
                    "None or delete the dynamization unless entries were accepted.";
         }
 
+        /// <summary>
+        /// Writes <paramref name="text"/> to the MultilingualText item of the project's editing
+        /// language (else reference language, else the only item). Returns the culture written.
+        /// </summary>
+        private static string SetMultilingualTextFromString(object multilingualText, string text)
+        {
+            var items = (GetPropertyRobust(multilingualText, "Items")?.GetValue(multilingualText) as IEnumerable)?
+                .Cast<object>().ToList() ?? new List<object>();
+            if (items.Count == 0) throw new PortalException(PortalErrorCode.InvalidState, "MultilingualText has no items (no project languages?).");
+
+            string? CultureOf(object item)
+            {
+                var lang = GetPropertyRobust(item, "Language")?.GetValue(item);
+                return lang == null ? null : (GetPropertyRobust(lang, "Culture")?.GetValue(lang) as System.Globalization.CultureInfo)?.Name;
+            }
+
+            var wanted = ProjectEditingCulture(multilingualText);
+            var target = items.FirstOrDefault(i => string.Equals(CultureOf(i), wanted, StringComparison.OrdinalIgnoreCase))
+                         ?? (items.Count == 1 ? items[0] : null);
+            if (target == null)
+            {
+                throw new PortalException(PortalErrorCode.InvalidParams,
+                    $"Project language '{wanted ?? "?"}' not among the text's cultures ({string.Join(", ", items.Select(CultureOf))}). " +
+                    "Use the path <Prop>.Items.<culture>.Text.");
+            }
+
+            GetPropertyRobust(target, "Text")!.SetValue(target, text);
+            return CultureOf(target) ?? "";
+        }
+
+        /// <summary>Editing (else reference) language of the project owning <paramref name="o"/>, via the Parent chain.</summary>
+        private static string? ProjectEditingCulture(object o)
+        {
+            object? cur = o;
+            for (int depth = 0; depth < 15 && cur != null; depth++)
+            {
+                var settings = GetPropertyRobust(cur, "LanguageSettings")?.GetValue(cur);
+                if (settings != null)
+                {
+                    foreach (var key in new[] { "EditingLanguage", "ReferenceLanguage" })
+                    {
+                        var lang = GetPropertyRobust(settings, key)?.GetValue(settings);
+                        var name = lang == null ? null : (GetPropertyRobust(lang, "Culture")?.GetValue(lang) as System.Globalization.CultureInfo)?.Name;
+                        if (!string.IsNullOrEmpty(name)) return name;
+                    }
+                    return null;
+                }
+                try { cur = GetPropertyRobust(cur, "Parent")?.GetValue(cur); }
+                catch { return null; }
+            }
+            return null;
+        }
+
+        /// <summary>MultilingualText → { culture: text }.</summary>
+        private static Dictionary<string, string?> MultilingualToDict(object multilingualText)
+        {
+            var d = new Dictionary<string, string?>();
+            try
+            {
+                var items = GetPropertyRobust(multilingualText, "Items")?.GetValue(multilingualText) as IEnumerable;
+                if (items == null) return d;
+                foreach (var item in items)
+                {
+                    var lang = GetPropertyRobust(item, "Language")?.GetValue(item);
+                    var culture = lang == null ? "?" : (GetPropertyRobust(lang, "Culture")?.GetValue(lang) as System.Globalization.CultureInfo)?.Name ?? "?";
+                    d[culture] = GetPropertyRobust(item, "Text")?.GetValue(item)?.ToString();
+                }
+            }
+            catch { }
+            return d;
+        }
+
         private static object? FormatReadBack(object? v)
         {
             if (v == null) return null;
+            if (v.GetType().Name == "MultilingualText") return MultilingualToDict(v);
             if (IsEngineeringObject(v)) return DescribeEngineeringObjectRef(v);
             if (v is System.Drawing.Color c) return "0x" + c.ToArgb().ToString("X8");
             if (v is IEnumerable en && v is not string) return en.Cast<object?>().Select(x => x?.ToString()).ToList();

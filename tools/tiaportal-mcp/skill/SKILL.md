@@ -1022,6 +1022,35 @@ Script dynamization (needs runtime scripts): `Invoke` `Create<ScriptDynamization
 `args:["BackColor"]` on `…/Dynamizations`, then `SetProperty` `ScriptCode`, `Trigger.Type`=`Tags`,
 `Trigger.Tags`=`["State_Int"]` on `…/Dynamizations/BackColor`.
 
+### Alarms and multilingual texts (v2.8.3)
+
+V21 types (from the DLLs): Unified alarms derive from `AlarmBase` with `EventText`, `InfoText`,
+`EventText1..9` = read-only `MultilingualText` → `Items` (composition, `Find(Language)` only) →
+`MultilingualTextItem{Language.Culture, Text (rw string)}`. Items exist only for the project languages.
+
+- Plain string, project editing language (en-US here):
+  `SetObjectProperty objectKind=HmiPath objectPath="HMI_RT_1/DiscreteAlarms/Probe_Alarm" propertyPath="EventText" value="Heater 1 overtemperature"`
+  → writes the item of the project's editing language (else reference language), returns `{culture: text}` and `meta.culture`.
+- Explicit culture: `propertyPath="EventText.Items.de-DE.Text"` (items are addressed by culture name),
+  or HmiPath `…/Probe_Alarm/EventText/Items/en-US` + `Text`.
+- Reading a MultilingualText (GetObjectProperty / batch GetProperty) returns `{ "en-US": "...", ... }`.
+
+**Caution: `GetAttributeInfos` on Unified alarm objects.** On V21 one session ran
+`DiscreteAlarms.Create("Probe_Alarm")` → `DescribeObject` → `InvokeObject GetAttributeInfos` (returned an
+empty list) and TIA crashed shortly after. Not reproduced, no known Siemens issue found. Unified objects
+return an empty attribute list anyway: use `DescribeObject` (CLR properties) instead of
+`GetAttributeInfos`, and save before experimenting on alarms.
+
+### TIA crash recovery (v2.8.3)
+
+Before every TIA tool call the server checks that the TIA process it is bound to is still alive
+(a local PID lookup). If it is gone, it reconnects (attaches to a running TIA, else starts a new
+one) and reopens the project that was open (path remembered from OpenProject /
+AttachToOpenProject / Connect), then runs the call. The response then carries
+`meta.recovery = {crashDetected, deadPid, newPid, lastProject, action: reattached|reopened|failed|…,
+error?, elapsedMs}`. Unsaved edits from before the crash are gone; redo them. Connect /
+ConnectIsolated / Disconnect are never intercepted.
+
 ### Text lists: export → edit → import (v2.8.2)
 
 V21 Unified exposes no text-list entries in Openness: `HmiSoftware.HmiTextLists` offers only

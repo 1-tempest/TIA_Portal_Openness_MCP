@@ -1,5 +1,25 @@
 ﻿# Change Log
 
+## [2.8.3] - 2026-10-02 - TIA 崩溃后自动恢复；多语言文本按字符串写
+
+### 新增
+
+- **TIA 崩溃后自动恢复。** 原来 TIA 进程一旦退出，之后每次调用都撞在已释放的句柄上，直到有人手动
+  重连、再把工程打开。现在每次碰 TIA 的工具调用前先查绑定的 TIA 进程是否还活着（本地按 PID 查，
+  不走 Openness）；不在了就重连（有在跑的 TIA 就 attach，否则起一个新的），再重开上次打开的工程
+  （路径在 OpenProject / AttachToOpenProject / Connect 绑定时记下），然后执行这次调用。经过写进这次
+  响应的 `meta.recovery`（`action`: reattached / reopened / failed …）。Connect / ConnectIsolated /
+  Disconnect 不拦。
+- **`MultilingualText` 属性可直接写字符串**（报警 `EventText` / `InfoText`、`ToolTipText` 等）：写到
+  工程编辑语言（否则参考语言）那一项；其它语言用 `EventText.Items.<culture>.Text`。HmiPath 里
+  `MultilingualTextItem` 按 culture 名寻址（`…/EventText/Items/en-US`）。读 MultilingualText 返回
+  `{culture: text}`。
+
+### 文档
+
+- SKILL.md：V21 Unified 报警文本的类型路径；`GetAttributeInfos` 在 Unified 报警对象上的一次崩溃记录
+  （未复现、未找到已知问题，建议改用 DescribeObject）；崩溃恢复说明。
+
 ## [2.8.2] - 2026-10-02 - Openness 导出/导入能传目录参数；服务器工作目录的文件往返
 
 ### 修复

@@ -437,6 +437,7 @@ namespace TiaMcpServer.Siemens
                 return o;
             }
             if (v is IEnumerable<string> strings) return new JsonArray(strings.Select(x => (JsonNode?)x).ToArray());
+            if (v.GetType().Name == "MultilingualText") return FormatOperationValue(MultilingualToDict(v));
             if (IsEngineeringObject(v)) return FormatOperationValue(DescribeEngineeringObjectRef(v));
             return v.ToString();
         }
