@@ -28,6 +28,12 @@
   改动前后的发布时间可以量，而不是猜。HMI 步骤工具的 meta 新增 `elapsedMs`，
   `BindUnifiedHmiTagDynamization` 新增 `resolveMs` / `bindMs`，`InvokeObject` 新增
   `resolveMs` / `invokeMs`。
+- **`SetObjectProperty` 写 object 类型属性**（`MappingTableEntry.Value/From/To`、`Trigger.Tags`）：
+  按当前值的类型、否则按被动态化的画面项属性类型（BackColor → Color）转换，再退回原值；
+  JSON 数组按属性接受的形状转成 string[] / List。点路径中间段支持成员名与 `[n]`。
+- **`InvokeObject` 在 HmiPath 集合上 `Create…` 返回新成员的 `Path`**（`…/Dynamizations/BackColor`、
+  `…/Entries/[0]`）；枚举参数（如 `Entries.Create(BitDynamizationType)`）按参数类型转换。
+  HmiPath 里的动态化可按其 `PropertyName` 寻址。
 - **`--http-timeout <秒>`**：HTTP 单次请求等响应的上限，默认由 30 秒提到 300 秒。
 
 ### 变更

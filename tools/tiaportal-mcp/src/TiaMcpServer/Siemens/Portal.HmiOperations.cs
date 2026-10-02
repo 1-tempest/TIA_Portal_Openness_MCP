@@ -376,6 +376,7 @@ namespace TiaMcpServer.Siemens
         private static object? JsonToPlain(JsonNode? n)
         {
             if (n == null) return null;
+            if (n is JsonArray arr) return arr.Select(JsonToPlain).ToList();
             if (n is JsonValue jv)
             {
                 if (jv.TryGetValue<string>(out var s)) return s;

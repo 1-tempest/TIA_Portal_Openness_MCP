@@ -1731,11 +1731,7 @@ namespace TiaMcpServer.Siemens
                 if (current == null) return null;
 
                 // 不用 GetProperty(name)：派生类用 new 遮蔽的属性会抛 AmbiguousMatchException。
-                var p = current.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance)
-                    .Where(x => x.GetIndexParameters().Length == 0
-                                && x.Name.Equals(seg, StringComparison.OrdinalIgnoreCase))
-                    .OrderBy(x => x.Name == seg ? 0 : 1)
-                    .FirstOrDefault();
+                var p = GetPropertyRobust(current, seg);
                 if (p != null)
                 {
                     current = p.GetValue(current);
@@ -1744,26 +1740,17 @@ namespace TiaMcpServer.Siemens
 
                 if (current is not IEnumerable en || current is string) return null;
 
-                object? next = null;
                 if (seg.StartsWith("[") && seg.EndsWith("]")
                     && int.TryParse(seg.Substring(1, seg.Length - 2), out var index))
                 {
-                    next = en.Cast<object?>().Skip(index).FirstOrDefault();
+                    current = en.Cast<object?>().Skip(index).FirstOrDefault();
                 }
                 else
                 {
-                    foreach (var it in en)
-                    {
-                        var n = TryGetName(it);
-                        if (!string.IsNullOrWhiteSpace(n) &&
-                            string.Equals(n!.Trim(), seg, StringComparison.OrdinalIgnoreCase))
-                        {
-                            next = it;
-                            break;
-                        }
-                    }
+                    // Find(name) first (Dynamizations.Find takes the dynamized property name),
+                    // then a case-insensitive match on Name / PropertyName.
+                    current = ModelContextProtocol.HmiNameLookup.Find(current, seg);
                 }
-                current = next;
             }
             return current;
         }
@@ -2101,7 +2088,8 @@ namespace TiaMcpServer.Siemens
                         converted[i] = oldValue == null ? av : CoerceReflectionValue(av, oldValue.GetType());
                         continue;
                     }
-                    converted[i] = av;
+                    // 枚举（如 Entries.Create(BitDynamizationType)）、Color、数值等按参数类型转换。
+                    converted[i] = pt == typeof(object) ? av : CoerceReflectionValue(av, pt);
                 }
 
                 var result = mi.Invoke(instance, converted);
@@ -2121,7 +2109,16 @@ namespace TiaMcpServer.Siemens
                 else if (IsEngineeringObject(result))
                 {
                     // 别把整个 Openness 对象交给 JSON 序列化：只回能再次寻址它的信息。
-                    outValue = DescribeEngineeringObjectRef(result!);
+                    var reference = DescribeEngineeringObjectRef(result!);
+                    // 在集合上 Create 出来的新成员：给出可直接再用的 HmiPath/Path。
+                    if (instance is IEnumerable && IsPathKind(resultKind))
+                    {
+                        var seg = reference.TryGetValue("Name", out var n) && !string.IsNullOrWhiteSpace(n) ? n
+                            : reference.TryGetValue("PropertyName", out var pn) && !string.IsNullOrWhiteSpace(pn) ? pn
+                            : IndexInCollection(instance, result!) is int idx && idx >= 0 ? $"[{idx}]" : null;
+                        if (seg != null) reference["Path"] = resultPath.TrimEnd('/') + "/" + seg;
+                    }
+                    outValue = reference;
                 }
 
                 return new ModelContextProtocol.ResponseObjectValue
@@ -2252,7 +2249,7 @@ namespace TiaMcpServer.Siemens
                 throw new PortalException(PortalErrorCode.InvalidParams, "propertyPath is empty.");
             }
 
-            var owner = parts.Length == 1 ? o : GetPropertyPathValue(o, string.Join(".", parts.Take(parts.Length - 1)));
+            var owner = parts.Length == 1 ? o : WalkObjectPath(o, parts.Take(parts.Length - 1));
             if (owner == null)
             {
                 throw new PortalException(PortalErrorCode.NotFound,
@@ -2266,11 +2263,7 @@ namespace TiaMcpServer.Siemens
                 throw new PortalException(PortalErrorCode.InvalidParams, hardDenyReason!);
             }
 
-            var p = owner.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance)
-                .Where(x => x.GetIndexParameters().Length == 0
-                            && x.Name.Equals(propName, StringComparison.OrdinalIgnoreCase))
-                .OrderBy(x => x.Name == propName ? 0 : 1)
-                .FirstOrDefault();
+            var p = GetPropertyRobust(owner, propName);
             if (p == null || !p.CanWrite || p.SetMethod == null || !p.SetMethod.IsPublic)
             {
                 throw new PortalException(PortalErrorCode.InvalidParams,
@@ -2279,10 +2272,10 @@ namespace TiaMcpServer.Siemens
                     + " Use DescribeObject to list properties, or InvokeObject SetAttribute for attributes.");
             }
 
-            object? typed;
+            List<object?> candidates;
             try
             {
-                typed = CoerceReflectionValue(value, p.PropertyType);
+                candidates = BuildSetCandidates(owner, p, value);
             }
             catch (Exception ex)
             {
@@ -2291,15 +2284,34 @@ namespace TiaMcpServer.Siemens
                     $"Cannot convert '{value}' to {p.PropertyType.FullName}: {ex.Message}.{hint}", null, ex);
             }
 
-            try
+            // Object-typed properties (MappingTableEntry.Value/From/To, Trigger.Tags) take whatever
+            // Openness accepts at runtime; try the likeliest shapes in order and report which one stuck.
+            var errors = new List<string>();
+            object? used = null;
+            var ok = false;
+            foreach (var candidate in candidates)
             {
-                p.SetValue(owner, typed);
+                try
+                {
+                    p.SetValue(owner, candidate);
+                    used = candidate;
+                    ok = true;
+                    break;
+                }
+                catch (TargetInvocationException tie)
+                {
+                    var inner = tie.InnerException ?? tie;
+                    errors.Add($"{candidate?.GetType().Name ?? "null"}: {inner.Message}");
+                }
+                catch (ArgumentException aex)
+                {
+                    errors.Add($"{candidate?.GetType().Name ?? "null"}: {aex.Message}");
+                }
             }
-            catch (TargetInvocationException tie)
+            if (!ok)
             {
-                var inner = tie.InnerException ?? tie;
                 throw new PortalException(PortalErrorCode.OpennessError,
-                    $"Setting {propertyPath} failed: {inner.Message}", null, inner);
+                    $"Setting {propertyPath} failed: {string.Join(" | ", errors)}");
             }
 
             var readBack = p.CanRead ? p.GetValue(owner) : null;
@@ -2308,9 +2320,142 @@ namespace TiaMcpServer.Siemens
                 Message = "OK",
                 ObjectKind = objectKind,
                 ObjectPath = $"{objectPath}.{propertyPath}",
-                ValueType = p.PropertyType.FullName ?? p.PropertyType.Name,
-                Value = IsEngineeringObject(readBack) ? DescribeEngineeringObjectRef(readBack!) : readBack?.ToString()
+                ValueType = used?.GetType().FullName ?? p.PropertyType.FullName ?? p.PropertyType.Name,
+                Value = FormatReadBack(readBack)
             };
+        }
+
+        private static object? FormatReadBack(object? v)
+        {
+            if (v == null) return null;
+            if (IsEngineeringObject(v)) return DescribeEngineeringObjectRef(v);
+            if (v is System.Drawing.Color c) return "0x" + c.ToArgb().ToString("X8");
+            if (v is IEnumerable en && v is not string) return en.Cast<object?>().Select(x => x?.ToString()).ToList();
+            return v.ToString();
+        }
+
+        /// <summary>
+        /// Values to try, in order. Typed property: one value, converted (enum, Color, number, list).
+        /// Object-typed property: the type of its current value, else the type of the dynamized
+        /// item property (for mapping-table entries: BackColor → Color), then the raw value.
+        /// </summary>
+        private static List<object?> BuildSetCandidates(object owner, PropertyInfo p, object? value)
+        {
+            var list = new List<object?>();
+            var items = value as IList<object?>;
+
+            if (p.PropertyType != typeof(object))
+            {
+                list.Add(items != null ? ConvertList(items, p.PropertyType) : CoerceReflectionValue(value, p.PropertyType));
+                return list;
+            }
+
+            object? current = null;
+            try { current = p.GetValue(owner); } catch { }
+            var hint = current != null && !IsEngineeringObject(current) ? current.GetType() : null;
+            if (hint == null && (p.Name == "Value" || p.Name == "AlternateValue")) hint = InferDynamizedPropertyType(owner);
+
+            void TryAdd(Func<object?> make)
+            {
+                try
+                {
+                    var v = make();
+                    if (!list.Any(x => Equals(x, v) && x?.GetType() == v?.GetType())) list.Add(v);
+                }
+                catch { }
+            }
+
+            if (items != null)
+            {
+                if (hint != null) TryAdd(() => ConvertList(items, hint));
+                TryAdd(() => items.Select(x => x?.ToString() ?? "").ToArray());
+                TryAdd(() => items.Select(x => x?.ToString() ?? "").ToList());
+                TryAdd(() => items.ToList());
+                TryAdd(() => string.Join(",", items.Select(x => x?.ToString())));
+                return list;
+            }
+
+            if (hint != null) TryAdd(() => CoerceReflectionValue(value, hint));
+            if (value is string s && Regex.IsMatch(s.Trim(), "^(0x[0-9A-Fa-f]{8}|#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?)$"))
+            {
+                TryAdd(() => CoerceReflectionValue(s, typeof(System.Drawing.Color)));
+            }
+            if (value is long l && l >= int.MinValue && l <= int.MaxValue) TryAdd(() => (int)l);
+            TryAdd(() => value);
+            return list;
+        }
+
+        private static object ConvertList(IList<object?> items, Type targetType)
+        {
+            if (targetType.IsArray)
+            {
+                var et = targetType.GetElementType()!;
+                var arr = Array.CreateInstance(et, items.Count);
+                for (int i = 0; i < items.Count; i++) arr.SetValue(CoerceReflectionValue(items[i], et), i);
+                return arr;
+            }
+
+            var elem = targetType.IsGenericType ? targetType.GetGenericArguments().FirstOrDefault() : null;
+            if (elem != null)
+            {
+                var concrete = targetType.IsInterface || targetType.IsAbstract ? typeof(List<>).MakeGenericType(elem) : targetType;
+                if (targetType.IsAssignableFrom(concrete) && concrete.GetConstructor(Type.EmptyTypes) != null)
+                {
+                    var coll = (IList)Activator.CreateInstance(concrete)!;
+                    foreach (var it in items) coll.Add(CoerceReflectionValue(it, elem));
+                    return coll;
+                }
+            }
+            throw new InvalidOperationException($"cannot build {targetType.FullName} from a JSON array");
+        }
+
+        /// <summary>
+        /// For an object inside a dynamization (e.g. a mapping-table entry), the CLR type of the
+        /// screen-item property that dynamization drives, found by walking Parent up to the
+        /// dynamization (PropertyName) and its screen item.
+        /// </summary>
+        private static Type? InferDynamizedPropertyType(object start)
+        {
+            object? o = start;
+            for (int depth = 0; depth < 8 && o != null; depth++)
+            {
+                try
+                {
+                    if (GetPropertyRobust(o, "PropertyName")?.GetValue(o) is string propName && !string.IsNullOrWhiteSpace(propName))
+                    {
+                        object? item = GetPropertyRobust(o, "Parent")?.GetValue(o);
+                        for (int up = 0; up < 3 && item != null; up++)
+                        {
+                            var target = GetPropertyRobust(item, propName);
+                            if (target != null) return target.PropertyType;
+                            item = GetPropertyRobust(item, "Parent")?.GetValue(item);
+                        }
+                        return null;
+                    }
+                    o = GetPropertyRobust(o, "Parent")?.GetValue(o);
+                }
+                catch
+                {
+                    return null;
+                }
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// Property by name without GetProperty(name): Openness types redeclare members with
+        /// 'new' (Parent, …), which makes GetProperty throw AmbiguousMatchException. Exact case
+        /// and the most-derived declaration win.
+        /// </summary>
+        private static PropertyInfo? GetPropertyRobust(object o, string name)
+        {
+            var t = o.GetType();
+            return t.GetProperties(BindingFlags.Public | BindingFlags.Instance)
+                .Where(x => x.GetIndexParameters().Length == 0
+                            && x.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
+                .OrderBy(x => x.Name == name ? 0 : 1)
+                .ThenBy(x => x.DeclaringType == t ? 0 : 1)
+                .FirstOrDefault();
         }
 
         private static bool IsEngineeringObject(object? o)
@@ -2364,6 +2509,32 @@ namespace TiaMcpServer.Siemens
                 ? $"Type '{typeName}' not found in loaded Siemens.Engineering assemblies."
                 : $"Type '{typeName}' is ambiguous; use the full name: {string.Join(", ", candidates.Select(c => c.FullName))}.";
             return null;
+        }
+
+        private static bool IsPathKind(string? kind)
+        {
+            var k = (kind ?? "").Trim().ToLowerInvariant();
+            return k == "hmipath" || k == "hmi_path" || k == "hmi-path" || k == "path";
+        }
+
+        private static int IndexInCollection(object collection, object member)
+        {
+            try
+            {
+                var indexOf = collection.GetType().GetMethods(BindingFlags.Public | BindingFlags.Instance)
+                    .FirstOrDefault(m => m.Name == "IndexOf" && m.GetParameters().Length == 1
+                                         && m.GetParameters()[0].ParameterType.IsInstanceOfType(member));
+                if (indexOf?.Invoke(collection, new[] { member }) is int i) return i;
+            }
+            catch { }
+
+            var n = 0;
+            foreach (var it in (IEnumerable)collection)
+            {
+                if (Equals(it, member)) return n;
+                n++;
+            }
+            return -1;
         }
 
         private static Type? FindTypeBySuffix(string typeSuffix)

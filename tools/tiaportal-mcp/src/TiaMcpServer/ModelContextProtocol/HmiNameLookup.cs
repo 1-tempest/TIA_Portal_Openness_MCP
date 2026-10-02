@@ -195,7 +195,8 @@ namespace TiaMcpServer.ModelContextProtocol
         {
             try
             {
-                return GetProperty(item, "Name")?.ToString();
+                // Dynamizations have no Name; they are addressed by the property they drive.
+                return (GetProperty(item, "Name") ?? GetProperty(item, "PropertyName"))?.ToString();
             }
             catch
             {

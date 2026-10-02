@@ -987,6 +987,35 @@ matches **§12** in this file; exercise it on your own Unified RT project.
   `Trigger.Type`, `Font.Size`); values are converted to the property type (enum by name,
   Color as `#RRGGBB` / `0xAARRGGBB`). Use `InvokeObject SetAttribute` for attributes.
 
+- Object-typed properties (`MappingTableEntry*.Value/AlternateValue/From/To`, `Trigger.Tags`)
+  take the type of their current value, else the type of the dynamized item property
+  (BackColor → Color), else the raw value; `meta`/`ValueType` reports what was accepted.
+  JSON arrays become string[] / List as the property accepts.
+- `InvokeObject` `Create…` on an HmiPath collection returns `{Type, Name?, PropertyName?, Path}`;
+  `Path` addresses the new member (`…/Dynamizations/BackColor`, `…/Entries/[0]`).
+
+### Tag-driven colour/text without scripts (value converter / mapping table)
+
+V21 API: `TagDynamization.ValueConverter.MappingTable{ConditionType: None|Range|Bitmask|Singlebit|Expression, Entries}`;
+`Entries.Create<MappingTableEntryRange|MappingTableEntrySimple>()` (no args) or
+`Entries.Create(BitDynamizationType: SingleBit|MultiBit)` (→ `MappingTableEntryBitmask`, `Condition`=UInt64).
+Entry members: `Value`, `AlternateValue`, `Flashing`, `FlashingRate`; Range adds `From`/`To`.
+
+```json
+[
+  {"op":"Bind","screen":"testing","item":"ProbeRect","property":"BackColor","tag":"State_Int","dataType":"Int"},
+  {"op":"SetProperty","screen":"testing","item":"ProbeRect","sub":"Dynamizations/BackColor/ValueConverter/MappingTable","name":"ConditionType","value":"Range"},
+  {"op":"Invoke","screen":"testing","item":"ProbeRect","sub":"Dynamizations/BackColor/ValueConverter/MappingTable/Entries","method":"Create<MappingTableEntryRange>","allowWrite":true},
+  {"op":"SetProperty","screen":"testing","item":"ProbeRect","sub":"Dynamizations/BackColor/ValueConverter/MappingTable/Entries/[0]","name":"From","value":1},
+  {"op":"SetProperty","screen":"testing","item":"ProbeRect","sub":"Dynamizations/BackColor/ValueConverter/MappingTable/Entries/[0]","name":"To","value":1},
+  {"op":"SetProperty","screen":"testing","item":"ProbeRect","sub":"Dynamizations/BackColor/ValueConverter/MappingTable/Entries/[0]","name":"Value","value":"0xFF22C55E"}
+]
+```
+
+Script dynamization (needs runtime scripts): `Invoke` `Create<ScriptDynamization>` with
+`args:["BackColor"]` on `…/Dynamizations`, then `SetProperty` `ScriptCode`, `Trigger.Type`=`Tags`,
+`Trigger.Tags`=`["State_Int"]` on `…/Dynamizations/BackColor`.
+
 ### Many HMI edits: `ApplyHmiOperations` (v2.8.0)
 
 One call per SetAttribute / Bind / script / colour check costs a round trip plus a fresh

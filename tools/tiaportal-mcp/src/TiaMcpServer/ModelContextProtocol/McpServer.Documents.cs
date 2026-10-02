@@ -610,7 +610,7 @@ namespace TiaMcpServer.ModelContextProtocol
             [Description("Object kind: Project|Portal|Device|DeviceItem|Software|Block|Type|HmiScreen|HmiTag|HmiScreenItem|HmiPath|Path")] string objectKind,
             [Description("Object path. For HmiPath: \"<hmiSoftware>/<prop or member>/...\", e.g. HMI_RT_1/Screens/Home/ScreenItems/Btn1/Dynamizations/[0].")] string objectPath,
             [Description("Property path, e.g. ScriptCode or Font.Size")] string propertyPath,
-            [Description("New value (JSON string, number or bool)")] System.Text.Json.JsonElement value,
+            [Description("New value: JSON string, number, bool, or array (for list-valued properties such as Trigger.Tags). Colors as \"0xAARRGGBB\" or \"#RRGGBB\".")] System.Text.Json.JsonElement value,
             [Description("softwarePath required for Block/Type")] string softwarePath = "")
         {
             try
@@ -622,6 +622,14 @@ namespace TiaMcpServer.ModelContextProtocol
                     System.Text.Json.JsonValueKind.False => false,
                     System.Text.Json.JsonValueKind.Number => value.TryGetInt64(out var l) ? l : (object)value.GetDouble(),
                     System.Text.Json.JsonValueKind.Null => null,
+                    System.Text.Json.JsonValueKind.Array => value.EnumerateArray().Select(e => (object?)(e.ValueKind switch
+                    {
+                        System.Text.Json.JsonValueKind.String => e.GetString(),
+                        System.Text.Json.JsonValueKind.True => true,
+                        System.Text.Json.JsonValueKind.False => false,
+                        System.Text.Json.JsonValueKind.Number => e.TryGetInt64(out var el) ? el : (object)e.GetDouble(),
+                        _ => e.GetRawText()
+                    })).ToList(),
                     _ => value.GetRawText()
                 };
                 return Portal.SetObjectProperty(objectKind, objectPath, propertyPath, v, softwarePath);
